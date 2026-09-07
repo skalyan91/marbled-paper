@@ -66,13 +66,23 @@ function customDropdown(ctrl: { $select: HTMLSelectElement; $widget: HTMLElement
         if (url && box instanceof HTMLImageElement) { box.src = url; box.alt = ""; box.loading = "lazy"; box.addEventListener("error", () => box.classList.add("missing")); }
         item.appendChild(box);
       }
-      item.appendChild(document.createTextNode(name));
+      const label = document.createElement("span");
+      label.className = "label";
+      label.textContent = name;
+      label.title = name;   // the full name where the menu's width cap has trimmed it
+      item.appendChild(label);
       item.addEventListener("click", () => { ctrl.setValue(ctrl._values[i]); close(); });
       list!.appendChild(item);
     });
+    // never wider than the panel, and kept inside it: the right edge sits on the control's right edge
+    const panel = (ctrl.$widget.closest(".lil-gui.root") as HTMLElement | null)?.getBoundingClientRect();
+    if (panel) list.style.maxWidth = `${Math.floor(panel.width - 8)}px`;
     document.body.appendChild(list);
-    const lr = list.getBoundingClientRect();
+    let lr = list.getBoundingClientRect();
     if (lr.bottom > innerHeight) list.style.top = `${Math.max(4, r.top - lr.height - 2)}px`;
+    const minLeft = panel ? panel.left + 4 : 4;
+    list.style.left = `${Math.max(minLeft, Math.min(r.left, r.right - lr.width))}px`;
+    lr = list.getBoundingClientRect();
     if (lr.right > innerWidth) list.style.left = `${Math.max(4, innerWidth - lr.width - 4)}px`;
     document.addEventListener("pointerdown", onDoc, true);
   });
