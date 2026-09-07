@@ -543,11 +543,11 @@ float styleCoverage(Hit h, inout vec3 colr, float lodMat, float sig) {
     cov *= smoothstep(0.03, 0.10, w.y - w.x) * smoothstep(0.02, 0.08, w.x);
     colr *= 0.85 + 0.3 * tnoise(h.S * 0.08, lodFor(lodMat, 0.08)).b;
   }
-  if ((st & 1024) != 0) { // GALLDOTS: a few small clear spots where gall broke the film
-    vec2 w = worley(h.u * 2.6 + hr.zw * 3.0, h.layer + 53);
-    float rr = 0.10 + 0.08 * hr.x;
-    float keep = step(0.55, hash1(h.cell + ivec2(int(floor(h.u.x * 2.6 + hr.z * 3.0)), int(floor(h.u.y * 2.6 + hr.w * 3.0))), 9));
-    cov *= 1.0 - keep * (1.0 - smoothstep(rr, rr + 0.05, w.x));
+  if ((st & 1024) != 0) { // GALLDOTS: a few clear spots where gall broke the film (dp 352: 5–10 per drop, 0.1–0.25 of its radius)
+    vec2 w = worley(h.u * 1.8 + hr.zw * 3.0, h.layer + 53);
+    float rr = (0.12 + 0.12 * hr.x) * p;
+    float keep = step(0.5, hash1(h.cell + ivec2(int(floor(h.u.x * 1.8 + hr.z * 3.0)), int(floor(h.u.y * 1.8 + hr.w * 3.0))), 9));
+    cov *= 1.0 - keep * (1.0 - smoothstep(rr, rr + 0.04, w.x));
   }
   if ((st & 128) != 0) { // METALLIC: bronze sheen
     float sp = tnoise(h.S * 0.9, lodFor(lodMat, 0.9)).r;
@@ -659,6 +659,7 @@ Shaded shadeChain(Trace t, vec2 P, vec3 paper, float lodScr, float tooth, int gf
   }
   for (int k = 0; k + 1 < MAXH; k++) {
     if (t.ws[k] <= 0.0 || t.ws[k + 1] <= 0.0) continue;
+    if (t.hs[k].layer == t.hs[k + 1].layer && t.hs[k].color == t.hs[k + 1].color) continue;   // the same wet paint: drops merge without a seam
     float meet = 4.0 * t.ws[k] * t.ws[k + 1] * ps[k].cov * ps[k + 1].cov;
     vec3 mixed = sqrt(max(ps[k].rgb * ps[k + 1].rgb, 0.0));
     ps[k].rgb = mix(ps[k].rgb, mixed, 0.5 * meet) * (1.0 - uBleed.z * meet);

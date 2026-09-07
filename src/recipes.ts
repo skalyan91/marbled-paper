@@ -350,13 +350,13 @@ export class Builder {
   }
 
   /** Sprinkle by measured statistics: spots per cm², median diameter (mm), log-normal spread. */
-  sprinkleStats(colour: number, st: { perCm2: number; d50: number; sig: number; wk?: number }, o: { style?: number; styleParam?: number; anim?: number; densityMul?: number; sizeMul?: number } = {}) {
+  sprinkleStats(colour: number, st: { perCm2: number; d50: number; sig: number; wk?: number }, o: { style?: number; styleParam?: number; anim?: number; densityMul?: number; sizeMul?: number; wobble?: number; jitter?: number } = {}) {
     const dens = st.perCm2 * (o.densityMul ?? 1);
     const cellMm = 10 / Math.sqrt(Math.max(0.05, dens));
     const r = (st.d50 * 1.35 * (o.sizeMul ?? 1)) / 2 / cellMm; // ×1.35: scan components are fragmented by later colours; clamped ≤ 0.8 cell in the bake
     const pk = this.pal.pack ?? {};
     const rr = r / (0.55 + 0.45 * this.p.gall);
-    return this.sprinkle([colour], { cell: cellMm * this.p.density, r: rr, sigma: Math.min(st.sig, pk.sigma ?? 9), fill: 1, jitter: pk.jitter ?? 0.46, style: o.style, styleParam: o.styleParam, anim: o.anim ?? 1, small: rr <= 0.3, shape: st.wk ?? 1.1, floorMm: 1.2 });
+    return this.sprinkle([colour], { cell: cellMm * this.p.density, r: rr, sigma: Math.min(st.sig, pk.sigma ?? 9), fill: 1, jitter: o.jitter ?? pk.jitter ?? 0.46, style: o.style, styleParam: o.styleParam, wobble: o.wobble, anim: o.anim ?? 1, small: rr <= 0.3, shape: st.wk ?? 1.1, floorMm: 1.2 });
   }
 
   /** Straight comb: tines spaced `spacing` mm along the perpendicular, moving in `dirDeg`.
@@ -771,8 +771,9 @@ export const RECIPES: Recipe[] = [
       const teal = pal.special ?? (round.length ? round.reduce((a, c) => ((pal.pigments[c].frac ?? 0) > (pal.pigments[a].frac ?? 0) ? c : a), round[0]) : pal.spots[pal.spots.length - 1]);
       const pale = zebraBase(b, round.length ? round : [teal]);
       // the dahlias: gall-heavy drops thrown onto the combed bath push the bands aside; gall opens pale spots inside them.
-      // Their sizes are even (8–20 mm on dp 352), so the shape is fixed rather than the heavy-tailed fit of the scan.
-      b.sprinkleStats(teal, { ...b.statsOf(teal), wk: 1.6, sig: 0.3 }, { style: STYLE.GALLDOTS, styleParam: 1, anim: 0.8 });
+      // A moderate size spread with satellites round the large drops, lumpy outlines and a wide jitter so that
+      // neighbours overlap and merge into lobed clusters (dp 352).
+      b.sprinkleStats(teal, { ...b.statsOf(teal), wk: 1.1, sig: 0.3 }, { style: STYLE.GALLDOTS, styleParam: 1, anim: 0.8, wobble: 2.5, jitter: 0.6 });
       for (const gb of round) if (gb !== teal) b.sprinkleStats(gb, b.statsOf(gb)); // pale blobs swirled on through the sieve
       if (pale !== undefined) b.sprinkleStats(pale, { perCm2: 0.05, d50: 19, sig: 0.3, wk: 2.5 }, { anim: 0.7 });
       if (!hasWhiteSpot(pal)) b.sprinkleStats(pal.white, b.statsOf(pal.white, { perCm2: 0.8, d50: 1.2, wk: 1.0 }), { anim: 1.2 });   // the light sprinkle
