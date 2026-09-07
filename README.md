@@ -171,7 +171,9 @@ Whether a sheet was combed across or down is measured too: the global structure 
 blurred scan gives the dominant streak orientation and its coherence (`streak` on each sheet),
 and each combed recipe declares the orientation it is authored in; on a sheet whose coherent
 streaks run the other way, every comb is turned through 90°. The same pattern name covers
-both (Double comb: dp 75 combed down the sheet, dp 393 across it).
+both (Antique straight: dp 131 combed down the sheet, dp 125 across it). The double combs opt
+out: on that two-scale pattern the tensor reads the arch bands on one sheet and the arch
+flanks on another, both combed down the sheet, so their columns stay as authored.
 
 The recipe is then fitted in the page: `window.marble.fitRecipe(name, iters, paletteKey)`
 builds the real recipe, measures every colour exactly with a shader probe over a wide sheet,

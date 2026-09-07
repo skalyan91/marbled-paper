@@ -374,7 +374,7 @@ export class Builder {
     const wake = o.kernel === "wake";
     // train sum as evaluated in the shader, for normalisation: a chain of arcs, or (1 + (d/L)²)^-1/2 per tine over the nine nearest tines
     const K = (u: number) => -0.5 * Math.log(1 + u * u);
-    const arc = (f: number) => { const g = f - Math.round(f); return Math.sqrt(Math.max(1 - 4 * g * g, 0) + 0.02); };
+    const arc = (f: number) => Math.abs(Math.cos(Math.PI * f));
     const sum = (f: number) => { if (!wake) return arc(f); const k = Math.round(f); let t = 0; for (let j = -4; j <= 4; j++) t += K(((f - k - j) * s) / L); return t; };
     let mean = 0; for (let i = 0; i < 64; i++) mean += sum((i + 0.5) / 64); mean /= 64;
     const ripple = (o.ripple ?? 1.2) * (o.strength ?? 1) * p.combStrength;
@@ -631,10 +631,14 @@ const zebraBase = (b: Builder, round: number[]) => {
   b.still = false;
   return pale;
 };
-const nonpareilBase = (b: Builder) => {
-  b.turkish({ cell: 14, ...COMBED });
-  b.comb2(0, 22, { ripple: 2.2 }); // wide comb drawn horizontally twice ("get-gel"): long streaks
-  b.comb(-90, 2.4, { ripple: 1.6 }); // fine comb drawn vertically once: a chain of rounded tongues with cusps between (dp 82)
+/** Nonpareil base: a stone base, the get-gel (a wide comb drawn twice, halving), then a fine comb drawn once
+ *  across it. `fine` is the fine comb's spacing: 2.4 mm on dp 82; the double combs sit on a coarser nonpareil
+ *  (arches 8–10 mm apart, bands 2–4 mm wide, dp 393 and 75), with spots to match. */
+const nonpareilBase = (b: Builder, fine = 2.4) => {
+  const coarse = fine / 2.4;
+  b.turkish({ cell: 14 * Math.sqrt(coarse), ...COMBED, sizeMul: COMBED.sizeMul * Math.sqrt(coarse), shape: coarse > 1.5 ? 2.5 : undefined });
+  b.comb2(0, 22 * Math.sqrt(coarse), { ripple: 2.2 }); // wide comb drawn horizontally twice ("get-gel"): long streaks
+  b.comb(-90, fine, { ripple: 1.6 }); // fine comb drawn vertically once: a chain of rounded tongues with cusps between (dp 82)
   return b;
 };
 
@@ -668,8 +672,12 @@ export const RECIPES: Recipe[] = [
   { name: "Wide comb (Arch)", streaks: "v", group: "Combed", palette: "dp274", palettes: ["dp274", "nonpareil19"], terms: ["wide comb", "arch"], defaults: { ...D19, viscosity: 0.3 }, note: "Narrow comb twice horizontally, then a wider comb vertically once.",
     build: (p, pal) => { const b = new Builder(p, pal); b.turkish({ cell: 14, ...COMBED }); b.comb2(0, 8, { ripple: 2.5 }); b.comb(-90, 22, { ripple: 1.2 }); return b.drift().scene(); } },
 
-  { name: "Double comb", streaks: "v", group: "Combed", palette: "dp393", palettes: ["dp393", "dp75"], terms: ["double comb", "doubled comb", "double nonpareil"], defaults: { ...D19, viscosity: 0.3 }, note: "Nonpareil, then a wider comb drawn through once.",
-    build: (p, pal) => { const b = nonpareilBase(new Builder(p, pal)); b.comb(90, 14, { ripple: 0.8 }); return b.drift().scene(); } },
+  // No `streaks` on the double combs: the structure tensor reads dp 393's arch bands (177°) but dp 471's arch flanks (81°),
+  // both combed down the sheet, so the per-sheet rotation would flip one of them. The columns stay as authored.
+  { name: "Double comb", group: "Combed", palette: "dp393", palettes: ["dp393"], terms: ["double comb", "doubled comb", "double nonpareil"], defaults: { ...D19, viscosity: 0.3 }, note: "A standard Nonpareil, then a comb with one set of teeth set wider drawn once more through the bath: the arched lines broken into separate arched columns (Wolfe; dp 393, 471).",
+    build: (p, pal) => { const b = nonpareilBase(new Builder(p, pal), 9); b.comb(-90, 18, { ripple: 1.2 }); /* drawn the same way as the fine comb ("once more through the bath"): the arches inside each column stretched two- to threefold (the arc profile's mid-gap strain is π × ripple), cusped lines between the columns (dp 393); harder shears the arches to hair lines */ return b.drift().scene(); } },
+  { name: "Double comb waved", group: "Combed", palette: "dp75", palettes: ["dp75"], terms: ["double comb waved", "waved double comb", "double comb wave"], defaults: { ...D19, viscosity: 0.3 }, note: "A standard Nonpareil, then a comb with one set of teeth set wider drawn once more through the bath in a wavy line (Wolfe; Miura's Wave; dp 75, 389).",
+    build: (p, pal) => { const b = nonpareilBase(new Builder(p, pal), 9); b.wavyComb(-90, 18, 9, 55, { alternate: false, ripple: 1.2 }); /* the same pull along a wavy path: the arches bunched into fans in diagonal waves (dp 75) */ return b.drift().scene(); } },
 
   { name: "Bouquet", streaks: "v", group: "Combed", palette: "dp172", palettes: ["dp172", "peacock19"], terms: ["bouquet", "fern"], defaults: { ...D19, viscosity: 0.3 }, note: "Nonpareil base (coarser fine comb), then a two-toothed comb drawn vertically in wavy lines.",
     build: (p, pal) => { const b = new Builder(p, pal); b.turkish({ cell: 14, ...COMBED }); b.comb2(0, 22, { ripple: 1.2 }); b.comb(-90, 4, { ripple: 0.8 });

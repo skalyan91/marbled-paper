@@ -293,10 +293,11 @@ void invSprinkle(inout Trace t, vec4 a, vec4 b, vec4 c, vec4 d4) {
 // a=(type,theta,s,o) b=(z,L,kernel,...) c=(mean,...)
 // Two regimes of a comb drawn through a viscous size, in the coordinate n across the stroke:
 // - arc (kernel 0): the paint pushed ahead of each tine forms a front that bows between the
-//   neighbouring tines and meets the next front in a cusp; the profile is a chain of arcs,
-//   K = sqrt(1 − 4f² + ε) with f the position in the gap. Broad rounded tongues, cusped valleys,
-//   the flanks drawn into hair lines (nonpareil, dp 82; the arches of a wide comb, dp 274).
-//   A cusped bell (exponential) gives pointed tongues and straight-sided zigzags instead.
+//   neighbouring tines and meets the next front in a cusp: a chain of arches, K = |cos(πn/s)|,
+//   rounded at the tine and curving all the way down to the cusp at the mid-gap (nonpareil,
+//   dp 82; the arches of a wide comb, dp 274). A chain of semicircles gives flat tops and
+//   straight, near-parallel flanks once the tongues are taller than wide; a cusped bell
+//   (exponential) gives pointed tongues and straight-sided zigzags.
 // - wake (kernel 1): widely set teeth pulled hard. The wake of a tine has nearly no width: the
 //   drag is the Stokes far field of a rod drawn through a viscous fluid, logarithmic in the
 //   distance, K = −½ ln(1 + (d/L)²) with a core L of half a millimetre. Its slope falls as 1/d,
@@ -314,9 +315,10 @@ void invComb(inout Trace t, vec4 a, vec4 b, vec4 c) {
   float n = dot(t.S, N) - a.w;
   float sum = 0.0, dsum = 0.0;
   if (b.z < 0.5) {
-    float f = fract(n / s + 0.5) - 0.5;          // −0.5..0.5 across the gap, 0 at the tine
-    sum = sqrt(max(1.0 - 4.0 * f * f, 0.0) + 0.02);
-    dsum = -4.0 * f / (2.0 * sum * s);
+    float ph = 3.14159265 * n / s;               // 0 at a tine, ±π/2 at the mid-gaps
+    float cs = cos(ph);
+    sum = abs(cs);
+    dsum = -3.14159265 / s * sin(ph) * sign(cs);
   } else {
     float kn = floor(n / s + 0.5);
     for (int j = -4; j <= 4; j++) {
