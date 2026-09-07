@@ -668,8 +668,14 @@ Shaded shadeChain(Trace t, vec2 P, vec3 paper, float lodScr, float tooth, int gf
   s.cov = 0.0; s.rgb = vec3(0.0); s.stretch = ps[0].stretch;
   for (int k = 0; k < MAXH; k++) { float cw = t.ws[k] * ps[k].cov; s.cov += cw; s.rgb += ps[k].rgb * cw; }
   s.rgb = s.cov > 1e-4 ? s.rgb / s.cov : ps[0].rgb;
-  // the unresolved share of the footprint: the paint drawn out below the pixel, averaged
-  if (t.lost > 0.0) { s.rgb = mix(s.rgb, uSheetMean, t.lost); s.cov = mix(s.cov, 1.0, t.lost); }
+  // the unresolved share of the footprint: the paint drawn out below the pixel. Where the trace found several
+  // pieces their average is the better estimate of it (it is the same interleaving, finer); where it found
+  // one or none, the sheet's mean colour (a random single piece would stipple)
+  if (t.lost > 0.0) {
+    float trust = clamp(float(t.nh - 2) / 2.0, 0.0, 1.0);   // 0 with ≤ 2 pieces (one hit and the rest), 1 with 4
+    s.rgb = mix(s.rgb, uSheetMean, t.lost * (1.0 - trust));
+    s.cov = mix(s.cov, 1.0, t.lost);
+  }
   rgbOut = s.rgb;
   return s;
 }
@@ -711,6 +717,7 @@ void main() {
   if (uDebug == 3) { float st = log2(stretchOf(h.J)) / 4.0; fragColor = vec4(mix(vec3(0.05, 0.1, 0.4), vec3(1.0, 0.9, 0.2), clamp(st, 0.0, 1.0)) * (h.hit ? 1.0 : 0.2), 1.0); return; }
   if (uDebug == 5) { fragColor = vec4(paper, 1.0); return; }
   if (uDebug == 6) { fragColor = vec4(t.sweep ? vec3(1.0, 0.3, 0.2) : (t.nh > 1 ? vec3(0.2, 0.8, 0.3) : vec3(0.1)), 1.0); return; }
+  if (uDebug == 12) { fragColor = vec4(vec3(t.lost), 1.0); return; }   // unresolved share of the footprint
   if (uDebug == 8) { // exact area fraction of one colour: sum of piece weights (ground film counts for its colour)
     int gf = int(uDry.z + 0.5) - 1;
     float cov = 0.0, bare = 0.0;
