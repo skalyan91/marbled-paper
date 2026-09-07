@@ -406,7 +406,7 @@ function rebuildScene() {
   if (customScene) { uploadScene(customScene.scene, customScene.pal); return; }
   const recipe = RECIPES.find((r) => r.name === settings.pattern) ?? RECIPES[0];
   paletteObj = PALETTES.find((p) => p.short === settings.palette || p.name === settings.palette) ?? PALETTES.find((p) => p.key === recipe.palette) ?? PALETTES[0];
-  const scene = recipe.build({ ...currentParams(), streaks: recipe.streaks }, paletteObj);
+  const scene = recipe.build({ ...currentParams(), streaks: recipe.streaks, streakScale: recipe.streakScale }, paletteObj);
   uploadScene(scene, paletteObj);
   if (url.searchParams.get("pattern") !== settings.pattern || url.searchParams.get("seed") !== String(settings.seed)) {
     url.searchParams.set("pattern", settings.pattern);

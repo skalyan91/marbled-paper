@@ -332,13 +332,29 @@ void invComb(inout Trace t, vec4 a, vec4 b, vec4 c) {
   t.J = rank1(t.J, M, N, -b.x * dsum);
 }
 
-// a=(type,theta,A,k) b=(phi,...)
+// a=(type,theta,A,k) b=(phi, noise amp mm, mm per noise unit, seed offset)
+// A displacement along M that depends only on N·S is exactly invertible whatever the function; the noise term
+// (three octaves of the tileable noise texture, non-repeating over a sheet) jogs drawn bands irregularly.
 void invShear(inout Trace t, vec4 a, vec4 b) {
   vec2 M = vec2(cos(a.y), sin(a.y));
   vec2 N = vec2(-M.y, M.x);
-  float ph = a.w * dot(t.S, N) + b.x;
-  t.S += a.z * sin(ph) * M;
-  t.J = rank1(t.J, M, N, a.z * a.w * cos(ph));
+  float n = dot(t.S, N);
+  float ph = a.w * n + b.x;
+  float disp = a.z * sin(ph);
+  float slope = a.z * a.w * cos(ph);
+  if (b.y > 0.0) {
+    float u = n / b.z;
+    vec2 q = vec2(u, b.w);
+    float e = 0.002;
+    vec4 n0 = tnoise(q, 0.0), nA = tnoise(q + vec2(e, 0.0), 0.0), nB = tnoise(q - vec2(e, 0.0), 0.0);
+    float f0 = (n0.g - 0.5) * 2.0 + (n0.b - 0.5) + (n0.a - 0.5) * 0.5;
+    float fA = (nA.g - 0.5) * 2.0 + (nA.b - 0.5) + (nA.a - 0.5) * 0.5;
+    float fB = (nB.g - 0.5) * 2.0 + (nB.b - 0.5) + (nB.a - 0.5) * 0.5;
+    disp += b.y * f0;
+    slope += b.y * (fA - fB) / (2.0 * e * b.z);
+  }
+  t.S += disp * M;
+  t.J = rank1(t.J, M, N, slope);
 }
 
 void invVortexAt(inout vec2 S, inout mat2 J, vec2 C, float z, float L, float r, float core, float sgn, float w) {
