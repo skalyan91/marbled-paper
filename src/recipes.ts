@@ -460,15 +460,16 @@ export class Builder {
   /** Turkish / stone base, laid as on the 17th–18th-c. sheets: the background colour thrown
    *  first and generously (it keeps 25–45 % of the area), then the spot colours in laying order
    *  with their measured size distributions, then gall water as small clear spots. */
-  turkish(o: { spots?: number; cell?: number; bgCell?: number; bgR?: number; bgFill?: number; lastStyle?: number; lastParam?: number; ringed?: boolean; fill?: number; gallDots?: boolean; skipBackground?: boolean; sizeMul?: number; densityMul?: number; swirl?: number; gold?: boolean } = {}) {
+  turkish(o: { spots?: number; cell?: number; bgCell?: number; bgR?: number; bgFill?: number; lastStyle?: number; lastParam?: number; ringed?: boolean; fill?: number; gallDots?: boolean; skipBackground?: boolean; sizeMul?: number; densityMul?: number; swirl?: number; gold?: boolean; ground?: number } = {}) {
     const pal = this.pal;
     const cell = o.cell ?? 12;
+    const groundIdx = o.ground ?? pal.background;
     if (!o.skipBackground) {
-      const fill = o.bgFill ?? pal.bg?.fill ?? 1;
+      const fill = o.bgFill ?? (o.ground !== undefined ? 1 : (pal.bg?.fill ?? 1));
       // A generously thrown first colour covers the bath: model it as a continuous ground film.
       // (Drops of ~1 cell radius would lose mass to the neighbourhood window and open false gaps.)
-      if (fill >= 0.95 && o.bgR === undefined) this.groundFill = pal.background;
-      else this.sprinkle([pal.background], { cell: o.bgCell ?? cell * 0.8, r: o.bgR ?? pal.bg?.r ?? 0.5, sigma: 0.15, jitter: 0.3, fill, style: o.ringed ? STYLE.RINGED : 0, anim: 0.8 });
+      if (fill >= 0.95 && o.bgR === undefined) this.groundFill = groundIdx;
+      else this.sprinkle([groundIdx], { cell: o.bgCell ?? cell * 0.8, r: o.bgR ?? pal.bg?.r ?? 0.5, sigma: 0.15, jitter: 0.3, fill, style: o.ringed ? STYLE.RINGED : 0, anim: 0.8 });
     }
     // Bronze/gold ink, where the sheet has a measurable amount, is the first colour thrown (UW: it
     // ends up as the vein colour). Recipes that throw it themselves pass gold: false.
@@ -546,6 +547,14 @@ export interface Recipe {
 // Combed sheets: the stone underneath had spots several times larger than the fragments the
 // combed scans show (bands of 1–2 mm remain after the get-gel), hence sizeMul / densityMul.
 const COMBED = { sizeMul: 2.4, densityMul: 0.3, gallDots: false };
+// Relative luminance of a palette hex (for "the darkest colour is the ground" rules).
+const luma = (h: string) => { const c = [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
+// Colours that took part in the sheet (ground and spots), by index.
+const laidColours = (pal: Palette) => [pal.background, ...pal.spots];
+// The darkest colour of substantial coverage (≥ 5% of the sheet when any qualifies): a 3% dark blue speck colour is not a ground.
+const darkestGround = (pal: Palette, cands: number[]) => { const big = cands.filter((c) => (pal.pigments[c].frac ?? 0) >= 5); const pool = big.length ? big : cands; return pool.reduce((a, c) => (luma(pal.pigments[c].hex) < luma(pal.pigments[a].hex) ? c : a), pool[0]); };
+// Give a colour measured only as a ground the default size statistics, so the fitter can drive it as a spot layer.
+const ensureStats = (pal: Palette, c: number, d50 = 8, perCm2 = 0.5) => { const q = pal.pigments[c]; if (!q.d50) { q.d50 = d50; q.perCm2 = q.perCm2 ?? perCm2; q.wk = q.wk ?? 0.8; } };
 // A sheet whose measured colours already include a thrown white ("white paint") gets no extra white sprinkle.
 const hasWhiteSpot = (pal: Palette) => pal.spots.some((c) => pal.pigments[c].name.startsWith("white"));
 const nonpareilBase = (b: Builder) => {
@@ -628,8 +637,22 @@ export const RECIPES: Recipe[] = [
       const sp = pal.special ?? pal.spots[pal.spots.length - 1]; b.sprinkleStats(sp, b.statsOf(sp, { perCm2: 0.8, d50: 4 }), { style: STYLE.PARTRIDGE, styleParam: 1 }); return b.drift().scene(); } },
 
   { name: "Schrottel", group: "Dispersant", palette: "schrottel19", palettes: ["schrottel19", "dp105"], terms: ["schrottel", "scrotel", "schrot"], defaults: { ...D19 }, note: "Turkish on a black ground, then a gall-and-oil mixture thrown: shot-like dark spots with white halos.",
-    build: (p, pal) => { const b = new Builder(p, pal); b.turkish({ cell: 14 });
-      const sp = pal.special ?? pal.spots[pal.spots.length - 1]; b.sprinkleStats(sp, b.statsOf(sp, { perCm2: 0.5, d50: 9 }), { style: STYLE.SHOT | STYLE.HALO, styleParam: 1 }); return b.drift().scene(); } },
+    build: (p, pal) => { const b = new Builder(p, pal);
+      // The gall-and-oil mixture is thrown last and covers most of the sheet: it is the colour with the largest coverage,
+      // whether the analysis called it a spot or (when its shot drops merged into a lacy sheet) the ground. The true
+      // ground is the darkest of the remaining colours; everything else is a plain Turkish spot laid before the shot.
+      const all = laidColours(pal);
+      const shot = pal.special ?? all.reduce((a, c) => ((pal.pigments[c].frac ?? 0) > (pal.pigments[a].frac ?? 0) ? c : a), all[0]);
+      const rest = all.filter((c) => c !== shot);
+      const ground = rest.length ? darkestGround(pal, rest) : pal.background;
+      // Where the sheet shows paper, the ground is thrown as drops leaving that much bare size; otherwise as a film.
+      const paper = pal.paperPct ?? 0;
+      b.turkish({ cell: 14, spots: 0, ground, gallDots: false, bgFill: paper > 3 ? Math.max(0.2, 1 - paper / 100) : undefined, bgR: paper > 3 ? 0.62 : undefined });
+      for (const c of rest) if (c !== ground) { ensureStats(pal, c, 3, 1); b.sprinkleStats(c, b.statsOf(c)); }
+      ensureStats(pal, shot, 9, 0.5);
+      // The mixture is thrown generously: big overlapping drops, not the many small fragments the segmentation sees
+      // between its holes, so the measured density is replaced by a sparse grid and the size alone sets the coverage.
+      b.sprinkleStats(shot, { ...b.statsOf(shot, { perCm2: 0.45, d50: 9 }), perCm2: 0.45 }, { style: STYLE.SHOT | STYLE.HALO, styleParam: 1 }); return b.drift().scene(); } },
 
   { name: "Shell", group: "Dispersant", palette: "shell19", palettes: ["shell19", "dp111", "dp118", "dp137", "dp61", "guyot20"], terms: ["shell", "oil"], defaults: { ...D19 }, note: "Final dominant colour mixed with oil: white outline, darker centre.",
     build: (p, pal) => { const b = new Builder(p, pal); b.turkish({ cell: 15, lastStyle: STYLE.HALO | STYLE.RINGED, lastParam: 1, fill: 0.85 }); return b.drift().scene(); } },
@@ -644,12 +667,19 @@ export const RECIPES: Recipe[] = [
       b.sprinkleStats(lacy, b.statsOf(lacy, { perCm2: 0.25, d50: 12, wk: 0.7 }), { style: STYLE.LACY, styleParam: 1 }); // thrown last over most of the bath
       return b.drift().scene(); } },
   { name: "Tiger (Sun spot)", group: "Dispersant", palette: "g162", palettes: ["g162", "g163", "schrottel19"], terms: ["tiger", "sun spot"], defaults: { ...D19 }, note: "Two or three colours, then black with kreolin/potash: eyes with radiating rays.",
-    build: (p, pal) => { const b = new Builder(p, pal); b.turkish({ cell: 16, spots: 0, gallDots: false }); // the dark ground only
-      // The eyes are the big coloured drops (≥10% of the sheet) thrown onto the dark ground with the tiger mixture; minor colours are plain spots.
+    build: (p, pal) => { const b = new Builder(p, pal);
+      // The ground is the darkest colour (the catalogue's "black"), whatever the sheet analysis called the ground; the
+      // eyes are the dominant remaining colour and its shades, thrown last with the tiger mixture; the rest are plain spots.
+      const all = laidColours(pal);
+      const ground = darkestGround(pal, all);
+      const rest = all.filter((c) => c !== ground);
       const rgb = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
-      const eye = pal.spots.reduce((a, c) => ((pal.pigments[c].frac ?? 0) > (pal.pigments[a].frac ?? 0) ? c : a), pal.spots[0]);
+      const eye = rest.reduce((a, c) => ((pal.pigments[c].frac ?? 0) > (pal.pigments[a].frac ?? 0) ? c : a), rest[0]);
       const near = (c: number) => Math.hypot(...rgb(pal.pigments[c].hex).map((v, i) => v - rgb(pal.pigments[eye].hex)[i])) < 70;
-      for (const c of pal.spots) { const isEye = c === eye || near(c); b.sprinkleStats(c, b.statsOf(c, { perCm2: 0.5, d50: 8 }), { style: isEye ? STYLE.TIGER : 0, styleParam: 1 }); }
+      b.turkish({ cell: 16, spots: 0, ground, gallDots: false });
+      const eyes = rest.filter((c) => c === eye || near(c)), plain = rest.filter((c) => !eyes.includes(c));
+      for (const c of plain) { ensureStats(pal, c, 3, 1); b.sprinkleStats(c, b.statsOf(c)); }
+      for (const c of eyes) { ensureStats(pal, c, 8, 0.5); b.sprinkleStats(c, b.statsOf(c, { perCm2: 0.5, d50: 8 }), { style: STYLE.TIGER, styleParam: 1 }); }
       return b.drift().scene(); } },
 
   { name: "Dahlia", group: "Dispersant", palette: "dp352", palettes: ["dp352"], terms: ["dahlia"], defaults: { ...D19 }, note: "Hair-fine zebra combing of the streak colours; large gall-heavy teal drops thrown on top so the streaks flow round them, each speckled with gall spots; small teal and white specks last (dp 352).",

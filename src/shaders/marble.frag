@@ -443,10 +443,12 @@ float styleCoverage(Hit h, inout vec3 colr, float lodMat, float sig) {
     cov *= mix(1.0, smoothstep(0.30 * p, 0.42 * p, w.x), fade);
     colr *= 1.0 + 0.25 * (tnoise(h.u * 1.7 + hr.xy, 3.0).r - 0.5);
   }
-  if ((st & 8) != 0) { // SHOT: sparse eyes with white ring and dark centre
+  if ((st & 8) != 0) { // SHOT: sparse eyes with a pale ring and dark centre
     vec2 w = worley(h.u * 3.5 + hr.xy * 4.0, h.layer + 23);
     float e = w.x;
-    cov *= 1.0 - (smoothstep(0.10, 0.13, e) * (1.0 - smoothstep(0.22, 0.26, e)));
+    float ring = smoothstep(0.10, 0.13, e) * (1.0 - smoothstep(0.22, 0.26, e));
+    cov *= 1.0 - 0.45 * ring;                      // the dispersant thins the ring, it does not clear it (dp 76: pale halos, ground only glimpsed)
+    colr *= 1.0 + 0.35 * ring;                     // and the thinned film reads paler
     colr *= mix(0.35, 1.0, smoothstep(0.08, 0.12, e));
     colr *= 1.0 + 0.3 * (tnoise(h.u * 1.3 + hr.zw, 2.0).b - 0.5);
   }
