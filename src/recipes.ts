@@ -369,7 +369,7 @@ export class Builder {
     const L = (o.L ?? s * (0.22 + 0.33 * p.viscosity));
     const wake = o.kernel === "wake";
     // train sum as evaluated in the shader, for normalisation: a chain of arcs, or (1 + (d/L)²)^-1/2 per tine over the nine nearest tines
-    const K = (u: number) => 1 / Math.sqrt(1 + u * u);
+    const K = (u: number) => 1 / (1 + Math.pow(u, 6));
     const arc = (f: number) => { const g = f - Math.round(f); return Math.sqrt(Math.max(1 - 4 * g * g, 0) + 0.02); };
     const sum = (f: number) => { if (!wake) return arc(f); const k = Math.round(f); let t = 0; for (let j = -4; j <= 4; j++) t += K(((f - k - j) * s) / L); return t; };
     let mean = 0; for (let i = 0; i < 64; i++) mean += sum((i + 0.5) / 64); mean /= 64;
@@ -596,10 +596,10 @@ const featherBase = (b: Builder, exclude: number[], spacing = 55) => {
   // larger (as for every combed sheet). No residual swirl: the combs supply all the elongation.
   b.turkish({ cell: 9, sizeMul: 3, densityMul: 0.5, gallDots: false, swirl: 0, exclude });
   b.comb(-90, 6, { ripple: 1.5, L: 2 });        // a 6 mm comb down the sheet breaks the spots into bands 1–5 mm wide (dp 29)
-  // Wide comb across and back, halving, drawn the length of the bath: the paint in each tine's narrow wake travels
-  // the whole stroke, and even midway between tines the lines still cross the gap at ~45° (dp 29: quills ~60 mm
-  // apart, alternately peaks and troughs). ripple 7 with a 2.5 mm wake is a drag of ~450 mm at the tine.
-  b.comb2(0, spacing, { ripple: 7, L: 2.5, kernel: "wake" });
+  // Wide comb across and back, halving, drawn the length of the bath: the band ~10 mm wide about each tine
+  // travels the whole stroke (the straight quill column), the drag falls off fast beyond it, and midway the
+  // lines cross the gap at ~45°, sigmoids of opposite sense in alternate gaps (dp 29: quills ~55 mm apart).
+  b.comb2(0, spacing, { ripple: 8, L: 5, kernel: "wake" });
   return b;
 };
 const nonpareilBase = (b: Builder) => {
@@ -628,14 +628,14 @@ export const RECIPES: Recipe[] = [
   { name: "Nonpareil", streaks: "v", group: "Combed", palette: "nonpareil19", palettes: ["nonpareil19", "dp21", "antique19"], terms: ["nonpareil", "get gel", "getgel", "old dutch"], defaults: { ...D19, viscosity: 0.3 }, note: "Get-gel (wide comb twice) then a 2–3 mm comb drawn once.",
     build: (p, pal) => nonpareilBase(new Builder(p, pal)).drift().scene() },
 
-  { name: "Feather", streaks: "h", group: "Combed", palette: "g229", palettes: ["g229", "g237", "g238", "g29"], terms: ["feather", "chevron"], defaults: { ...D19, viscosity: 0.8, stretchLimit: 150 }, note: "A fine comb draws every colour into hair lines; a comb with widely set teeth drawn across them and back, halving, and pulled hard draws the lines into hyperbolae: barbs swooping into the periodic quills and running along them (dp 229).",
+  { name: "Feather", streaks: "h", group: "Combed", palette: "g229", palettes: ["g229", "g237", "g238", "g29"], terms: ["feather", "chevron"], defaults: { ...D19, viscosity: 0.8, stretchLimit: 150, drift: 0.3 }, note: "A fine comb draws every colour into hair lines; a comb with widely set teeth drawn across them and back, halving, and pulled hard draws the lines into hyperbolae: barbs swooping into the periodic quills and running along them (dp 229).",
     build: (p, pal) => { const b = new Builder(p, pal); const round = roundColours(pal); featherBase(b, round);
       for (const c of round) b.sprinkleStats(c, b.statsOf(c), { anim: 0.6 });
       return b.drift().scene(); } },
   { name: "Icarus", streaks: "v", group: "Combed", palette: "g216", palettes: ["g216", "g217", "g219", "g220", "g221", "g222"], terms: ["icarus", "whirl"], defaults: { ...D19, viscosity: 0.3 }, note: "Fine nonpareil, then a deep comb drawn down the sheet along a slow arc: nested wing-like crescents (dp 216).",
-    build: (p, pal) => { const b = nonpareilBase(new Builder(p, pal)); b.wavyComb(-90, 14, 22, 260, { alternate: false, ripple: 2.5, L: 10, kernel: "wake" }); /* one deep wide-kernel comb drawn down a slow arc: nested crescents ~14 mm apart, all bowing one way (dp 216) */ return b.drift().scene(); } },
+    build: (p, pal) => { const b = nonpareilBase(new Builder(p, pal)); b.wavyComb(-90, 14, 22, 260, { alternate: false, ripple: 2.5, L: 3, kernel: "wake" }); /* one deep wide-kernel comb drawn down a slow arc: nested crescents ~14 mm apart, all bowing one way (dp 216) */ return b.drift().scene(); } },
   { name: "Cathedral", streaks: "v", group: "Combed", palette: "g218", palettes: ["g218", "g224", "g234", "g242", "g243", "g244"], terms: ["cathedral"], defaults: { ...D19, viscosity: 0.3 }, note: "Nonpareil, then one wide comb with strong pull drawn up the sheet: tall pointed arches (dp 218).",
-    build: (p, pal) => { const b = nonpareilBase(new Builder(p, pal)); b.comb(-90, 55, { ripple: 3.5, L: 16, kernel: "wake" }); return b.drift().scene(); } },
+    build: (p, pal) => { const b = nonpareilBase(new Builder(p, pal)); b.comb(-90, 55, { ripple: 3.5, L: 8, kernel: "wake" }); return b.drift().scene(); } },
   { name: "Wide comb (Arch)", streaks: "v", group: "Combed", palette: "dp274", palettes: ["dp274", "nonpareil19"], terms: ["wide comb", "arch"], defaults: { ...D19, viscosity: 0.3 }, note: "Narrow comb twice horizontally, then a wider comb vertically once.",
     build: (p, pal) => { const b = new Builder(p, pal); b.turkish({ cell: 14, ...COMBED }); b.comb2(0, 8, { ripple: 2.5 }); b.comb(-90, 22, { ripple: 1.2 }); return b.drift().scene(); } },
 
@@ -670,16 +670,16 @@ export const RECIPES: Recipe[] = [
       for (let i = 0; i < 5; i++) { const x = (hash01(p.seed, i * 3) - 0.5) * p.sheetW, y = (hash01(p.seed, i * 3 + 1) - 0.5) * p.sheetH; b.vortex(x, y, 18 * p.curlStrength, 9, 2, 2.5, i % 2 ? 1 : -1); }
       return b.drift().scene(); } },
 
-  { name: "Antique straight", streaks: "h", group: "Sprinkled", palette: "antique19", palettes: ["antique19", "dp125"], terms: ["antique straight", "antique"], defaults: { ...D19, viscosity: 0.3, stretchLimit: 150 }, note: "A Feather pattern completed, then a shower of fine dots, usually white, over the whole bath (Wolfe; dp 125, 131).",
+  { name: "Antique straight", streaks: "h", group: "Sprinkled", palette: "antique19", palettes: ["antique19", "dp125"], terms: ["antique straight", "antique"], defaults: { ...D19, viscosity: 0.3, stretchLimit: 150, drift: 0.3 }, note: "A Feather pattern completed, then a shower of fine dots, usually white, over the whole bath (Wolfe; dp 125, 131).",
     build: (p, pal) => { const b = new Builder(p, pal); const round = roundColours(pal); featherBase(b, round);
       for (const c of round) b.sprinkleStats(c, b.statsOf(c), { anim: 0.6 });   // the shower of fine dots
       if (!round.length && !hasWhiteSpot(pal)) b.sprinkleStats(pal.white, b.statsOf(pal.white, { perCm2: 2.3, d50: 1.6, wk: 0.9 }), { anim: 0.6 });
       return b.drift().scene(); } },
 
-  { name: "Zebra", streaks: "v", group: "Sprinkled", palette: "dp61", palettes: ["dp61", "antique19"], terms: ["zebra"], defaults: { ...D19, stretchLimit: 150 }, note: "Turkish base; a comb with one set of teeth drawn through twice, down and back up with the second pass halving the first, pulls the colours into long flowing bands (gezogener Achat); then one or more colours sprinkled or splashed on as large drops that sit on the bands (Wolfe and Miura; dp 15, 386).",
+  { name: "Zebra", streaks: "v", group: "Sprinkled", palette: "dp61", palettes: ["dp61", "antique19"], terms: ["zebra"], defaults: { ...D19, stretchLimit: 150, drift: 0.3 }, note: "Turkish base; a comb with one set of teeth drawn through twice, down and back up with the second pass halving the first, pulls the colours into long flowing bands (gezogener Achat); then one or more colours sprinkled or splashed on as large drops that sit on the bands (Wolfe and Miura; dp 15, 386).",
     build: (p, pal) => { const b = new Builder(p, pal); const round = roundColours(pal);
       b.turkish({ cell: 12, sizeMul: 2.2, densityMul: 0.35, gallDots: false, swirl: 0, exclude: round });
-      b.comb2(-90, 18, { ripple: 5, L: 2, kernel: "wake" });   // as the Feather's wide comb, on the plain stone base: bands swooping into the periodic tine paths
+      b.comb2(-90, 18, { ripple: 5, L: 2.5, kernel: "wake" });   // as the Feather's wide comb, on the plain stone base: bands swooping into the periodic tine paths
       for (const c of round) b.sprinkleStats(c, b.statsOf(c), { anim: 0.7 });   // the large final drops
       if (!round.length && !hasWhiteSpot(pal)) b.sprinkleStats(pal.white, b.statsOf(pal.white, { perCm2: 0.5, d50: 2.4, wk: 0.9 }), { anim: 0.7 });
       return b.drift().scene(); } },

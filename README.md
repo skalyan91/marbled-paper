@@ -53,7 +53,7 @@ Operators (`src/shaders/marble.frag`, authored forward in `src/recipes.ts`):
 | op | forward map | inverse used by the shader |
 |---|---|---|
 | drop of radius r at C | P ↦ C + (P−C)·√(1 + r²/‖P−C‖²) | P ↦ C + (P−C)·√(1 − r²/‖P−C‖²), windowed to a 5×5 / 7×7 cell neighbourhood |
-| comb (infinite train of parallel tines, spacing s) | P ↦ P + z·K(n − o)·M | two regimes, mean drag removed. *Arc*: the paint pushed ahead of each tine forms a front that bows between the neighbouring tines and meets the next in a cusp, K = √(1 − 4f² + ε) with f the position in the gap: rounded tongues, cusped valleys, flanks drawn into hair lines (nonpareil, dp 82; the arches of a wide comb). *Wake*, for widely set teeth pulled hard: each tine carries a wake of width L and the drag falls off as L/d beyond it, K = Σ (1 + (d/L)²)^{−1/2} over the nine nearest tines, so a line crossing the stroke becomes a hyperbola asymptotic to the tine's path: the barbs of a Feather swoop into the periodic quills (dp 229) |
+| comb (infinite train of parallel tines, spacing s) | P ↦ P + z·K(n − o)·M | two regimes, mean drag removed. *Arc*: the paint pushed ahead of each tine forms a front that bows between the neighbouring tines and meets the next in a cusp, K = √(1 − 4f² + ε) with f the position in the gap: rounded tongues, cusped valleys, flanks drawn into hair lines (nonpareil, dp 82; the arches of a wide comb). *Wake*, for widely set teeth pulled hard: a band of half-width L about each tine moves with it almost rigidly and the drag falls off fast beyond it, K = Σ 1 / (1 + (d/L)⁶) over the nine nearest tines. Drawn across and back with halving, a line crossing the stroke separates into straight columns of parallel lines along each tine's path (the quills) joined by sigmoids of opposite sense in alternate gaps, crossing the gap at about 45° midway (Feather, dp 29) |
 | sinusoidal shear | x ↦ x − A·sin(k·y + φ) | exact; also conjugates combs into wavy combs |
 | vortex (stylus swirl) | rotate about C by z·e^{−max(0,d−r)/L}/max(d,core) | rotate by the opposite angle |
 | Oseen short stroke | Jaffer eq. 14/15, segmented | segments run backwards (approximate, Fantasy/Placard only) |
@@ -119,9 +119,9 @@ measured on the scans: ≈1.2–1.5 spacings for fine combs, 2–6 for the get-g
   with bare ground.
 - Between throws the bath keeps moving: shears applied between colour layers give each
   colour the elongation measured for it on the sheet, so earlier colours are more deformed.
-- Feather is a fine comb (hair lines) followed by a comb with widely set teeth drawn across
-  them and back, halving, and pulled hard, with the wake kernel: the lines swoop into each
-  tine's path and run along it (dp 229). Antique straight is a Feather followed by a shower of
+- Feather is a comb of a few millimetres (bands) followed by a comb with widely set teeth
+  drawn across them and back, halving, and pulled the length of the bath with the wake
+  kernel: straight columns of parallel lines at the quills, opposite sigmoids between (dp 29). Antique straight is a Feather followed by a shower of
   fine dots (dp 125, 131); Zebra is the same hard-pulled wide comb on a plain stone base, then
   one or more colours splashed on as large drops that sit on the bands (dp 15, 386). In all
   three the colours whose spots stayed round on the sheet (measured elongation below 2.2) are

@@ -297,10 +297,12 @@ void invSprinkle(inout Trace t, vec4 a, vec4 b, vec4 c, vec4 d4) {
 //   K = sqrt(1 − 4f² + ε) with f the position in the gap. Broad rounded tongues, cusped valleys,
 //   the flanks drawn into hair lines (nonpareil, dp 82; the arches of a wide comb, dp 274).
 //   A cusped bell (exponential) gives pointed tongues and straight-sided zigzags instead.
-// - wake (kernel 1): widely set teeth pulled hard. Each tine carries a wake of width L and the
-//   drag falls off as ~L/d beyond it, K = (1 + (d/L)²)^-1/2, the far field of a rod drawn through
-//   a viscous fluid; a line crossing the stroke becomes a hyperbola asymptotic to the tine's path:
-//   the barbs of a Feather swoop into the quills and run along them (dp 229). The nine nearest
+// - wake (kernel 1): widely set teeth pulled hard. Each tine carries a band of half-width L that
+//   moves with it almost rigidly, and the drag falls off fast beyond it: K = 1 / (1 + (d/L)⁶).
+//   Drawn across and back with halving, a line crossing the stroke is drawn into straight columns
+//   of parallel lines along each tine's path (the quills) joined by sigmoids of opposite sense in
+//   alternate gaps, crossing the gap at ~45° midway (Feather, dp 29). Slow tails (1/d) do not do
+//   this: they make every line near-parallel to the stroke and the columns wavy. The nine nearest
 //   tines are summed (the set changes at the mid-gap where the two ends contribute equally).
 // The mean drag (c.x) is removed in both.
 void invComb(inout Trace t, vec4 a, vec4 b, vec4 c) {
@@ -317,9 +319,10 @@ void invComb(inout Trace t, vec4 a, vec4 b, vec4 c) {
     float kn = floor(n / s + 0.5);
     for (int j = -4; j <= 4; j++) {
       float u = (n - (kn + float(j)) * s) / L;
-      float q = inversesqrt(1.0 + u * u);
+      float u2 = u * u, u4 = u2 * u2;
+      float q = 1.0 / (1.0 + u4 * u2);
       sum += q;
-      dsum -= u * q * q * q / L;
+      dsum -= 6.0 * u4 * u * q * q / L;
     }
   }
   t.S -= b.x * (sum - c.x) * M;
