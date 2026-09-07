@@ -486,7 +486,7 @@ export class Builder {
   /** Turkish / stone base, laid as on the 17th–18th-c. sheets: the background colour thrown
    *  first and generously (it keeps 25–45 % of the area), then the spot colours in laying order
    *  with their measured size distributions, then gall water as small clear spots. */
-  turkish(o: { spots?: number; cell?: number; bgCell?: number; bgR?: number; bgFill?: number; lastStyle?: number; lastParam?: number; ringed?: boolean; fill?: number; gallDots?: boolean; skipBackground?: boolean; sizeMul?: number; densityMul?: number; swirl?: number; gold?: boolean; ground?: number; exclude?: number[]; shape?: number } = {}) {
+  turkish(o: { spots?: number; cell?: number; bgCell?: number; bgR?: number; bgFill?: number; lastStyle?: number; lastParam?: number; ringed?: boolean; fill?: number; gallDots?: boolean; skipBackground?: boolean; sizeMul?: number; densityMul?: number; swirl?: number; gold?: boolean; ground?: number; exclude?: number[] } = {}) {
     const pal = this.pal;
     const cell = o.cell ?? 12;
     const groundIdx = o.ground ?? pal.background;
@@ -511,7 +511,7 @@ export class Builder {
       const last = pal.special !== undefined ? c === pal.special : i === ns - 1;
       let style = (o.ringed ? STYLE.RINGED : 0);
       if (last && o.lastStyle) style |= o.lastStyle;
-      const st = { perCm2: pg.perCm2 ?? 1.2, d50: pg.d50 ?? 2.2, sig: pg.sig ?? 0.6, wk: o.shape ?? pg.wk };
+      const st = { perCm2: pg.perCm2 ?? 1.2, d50: pg.d50 ?? 2.2, sig: pg.sig ?? 0.6, wk: pg.wk };
       this.sprinkleStats(c, st, { style, styleParam: last ? o.lastParam : undefined, sizeMul: o.sizeMul, densityMul: o.densityMul });
       // Residual bath motion after this throw. The shear strain each colour must end up with
       // comes from its measured spot elongation on the sheet (default: the mean schedule of the
@@ -597,23 +597,17 @@ const roundColours = (pal: Palette) => pal.spots.filter((c) => (pal.pigments[c].
  *  plain stone base. */
 const featherBase = (b: Builder, exclude: number[], spacing = 55) => {
   b.still = true;   // the drawn base never moves; only what is thrown after it animates
-  // The measured spot sizes are the fragments left after the drawing (1–2 mm on dp 29); the spots thrown were
-  // ~2× larger and dense, so that drawn out five- to sixfold by the wide comb they are bands ~1 mm wide, dense as
-  // on the scan: anything finer is sheared below the pixel and averages grey, anything larger reads as a
-  // flame stitch. No fine comb or get-gel first (either shreds the bands); no residual swirl: the wide comb
-  // supplies all the elongation.
-  // The fragments' measured Weibull shapes are heavy-tailed; the spots thrown were of one size (shape 2.5), or a
-  // few giants would cover the sheet and the coverage could not be fitted.
-  b.turkish({ cell: 9, sizeMul: 2.2, densityMul: 0.9, gallDots: false, swirl: 0, exclude, shape: 2.5 });
+  // The measured spot sizes are the fragments left after the drawing; the spots thrown were several times
+  // larger (as for every combed sheet). No residual swirl: the combs supply all the elongation.
+  b.turkish({ cell: 9, sizeMul: 3, densityMul: 0.5, gallDots: false, swirl: 0, exclude });
+  b.comb(-90, 6, { ripple: 5, L: 0.3, kernel: "wake" });   // a 6 mm comb pulled hard: every spot drawn into a continuous band (no tongue ends anywhere on dp 29), 1–5 mm wide
   // Wide comb across and back, halving, drawn the length of the bath. The wake has nearly no width: the drag
   // is logarithmic in the distance to each tine's path, so the lines run nearly straight across the gap and
   // bend only in the last millimetres into the quill, sigmoids of opposite sense in alternate gaps (dp 29:
   // quills ~55 mm apart; its orientation histogram peaks at ~75° and ~110°, i.e. 65–70° from the stroke).
-  // The core L caps the strain at z/(2L): with 0.5 mm the bands within a millimetre of each tine were sheared
-  // to 0.15 mm, below a pixel, and the anti-aliasing averaged a third of the sheet grey; dp 29 keeps ~1 mm bands
-  // at the quills, which a 2 mm core gives (strain ≤ 6). The far field, and so the crossing angle, is unchanged:
-  // a ripple of 0.9 spacings gives the scan's 70° (measured against its orientation histogram).
-  b.comb2(0, spacing, { ripple: 0.9, L: 2, kernel: "wake" });
+  // With a 0.5 mm core, a ripple of 1.5 spacings gives that angle (z ≈ 23 mm: ~57 mm of drag at 1 mm); measured
+  // against the scan's orientation histogram, 1.3 left the crossing ~7° too oblique.
+  b.comb2(0, spacing, { ripple: 1.5, L: 0.5, kernel: "wake" });
   b.still = false;
   return b;
 };

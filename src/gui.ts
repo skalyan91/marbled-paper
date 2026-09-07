@@ -38,7 +38,7 @@ export interface Settings {
   randomAll: () => void; // random pattern, sheet and seed in one go
 }
 
-export const DEBUG_MODES = ["final", "hit id", "source coords", "stretch", "coverage", "paper only", "AA pieces", "flat ids", "probe", "weights", "piece0", "factors", "unresolved"];
+export const DEBUG_MODES = ["final", "hit id", "source coords", "stretch", "coverage", "paper only", "AA pieces", "flat ids", "probe", "weights", "piece0", "factors"];
 
 /** Replace the native <select> popup of a lil-gui option controller with a panel-styled list.
  *  `thumbs`, if given, returns one thumbnail URL (or null) per option; the images are fetched by
