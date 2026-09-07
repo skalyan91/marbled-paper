@@ -19,7 +19,7 @@ npm run dev      # Vite dev server, bound to all interfaces (LAN access)
 npm run build    # type-check + static build into dist/
 ```
 
-Keys: `space` pause · `n` / `p` next / previous pattern · `r` random seed · `s` save PNG.
+Keys: `space` pause · `n` / `p` next / previous pattern · `r` random seed · `x` randomise everything · `s` save PNG.
 Touch: swipe left / right for the next / previous pattern, tap with two fingers to pause.
 URL parameters: `?pattern=Nonpareil&seed=1234`.
 
@@ -89,8 +89,12 @@ measured on the scans: ≈1.2–1.5 spacings for fine combs, 2–6 for the get-g
   comes from the Jacobian. In a narrow footprint the outline's coverage is blurred by the
   bleed width and the trace continues behind the edge. Where the film is drawn out (combs),
   the footprint is treated as an interval along the stretch axis: each drop claims the exact
-  sub-interval it covers, the trace point moves into the remainder, and up to six pieces are
-  composited with wet-edge mingling between neighbours.
+  sub-interval it covers, the trace point moves into the remainder, and up to eight pieces are
+  composited with wet-edge mingling between neighbours. Chords of one colour from one layer
+  share a piece, so a film drawn out into many hair lines is averaged exactly rather than
+  sampled; and each chord is weighted by the drop's coverage of the pixel across the interval,
+  so a streak running along the stretch axis renders as a faint continuous line instead of
+  breaking into dashes.
 - Between throws the bath keeps moving: shears applied between colour layers give each
   colour the elongation measured for it on the sheet, so earlier colours are more deformed.
 - Wavy combs (Serpentine, Bouquet, Peacock) are straight combs conjugated by a sinusoidal

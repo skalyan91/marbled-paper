@@ -33,6 +33,7 @@ export interface Settings {
   debug: string;
   savePng: () => void;
   randomSeed: () => void;
+  randomAll: () => void; // random pattern, sheet and seed in one go
 }
 
 export const DEBUG_MODES = ["final", "hit id", "source coords", "stretch", "coverage", "paper only", "AA pieces", "flat ids", "probe", "weights", "piece0", "factors"];
@@ -76,13 +77,23 @@ export function palettesFor(pattern: string) {
   const r = RECIPES.find((x) => x.name === pattern) ?? RECIPES[0];
   const curated = r.palettes.map((k) => PALETTES.find((p) => p.key === k)!).filter(Boolean);
   const gen = (PALETTES as (Palette & { lead?: string })[]).filter((p) => p.lead !== undefined && bestRecipeFor(p.lead) === r.name);
-  // one entry per sheet, oldest first (century from the catalogue title, then catalogue number)
+  // one entry per sheet, oldest first (century from the catalogue title, then catalogue number;
+  // curated sheets without a catalogue number lead their century)
+  // one entry per sheet: the same catalogue item may exist as a curated and a generated palette
   const seen = new Set<string>();
-  const all = [...curated, ...gen].filter((p) => (seen.has(p.key) ? false : (seen.add(p.key), true)));
-  const century = (p: Palette) => { const m = /(\d+)(?:st|nd|rd|th)-c\./.exec(p.name); return m ? +m[1] : 99; };
-  const num = (p: Palette) => { const m = /dp (\d+)/.exec(p.source); return m ? +m[1] : 1e9; };
+  const all = [...curated, ...gen].filter((p) => { const id = String(dpNumber(p) ?? p.key); return seen.has(id) ? false : (seen.add(id), true); });
+  const century = (p: Palette) => { const m = /(\d+)(?:st|nd|rd|th)[-\s]c(?:\.|entury)/i.exec(p.name); return m ? +m[1] : 99; };
+  const num = (p: Palette) => dpNumber(p) ?? -1;
   return all.sort((a, b) => century(a) - century(b) || num(a) - num(b));
 }
+/** UW Decorated Paper catalogue number of a sheet ("dp 370" → 370), or null for a sheet without one. */
+export function dpNumber(p: Palette | undefined): number | null {
+  if (!p) return null;
+  const m = /\bdp\s*0*(\d+)/i.exec(p.source) ?? /\bdp\s*0*(\d+)/i.exec(p.name) ?? /^dp0*(\d+)$/i.exec(p.key);
+  return m ? +m[1] : null;
+}
+/** Item page of a sheet in the UW Decorated and Decorative Paper collection. */
+export const sheetUrl = (dp: number) => `https://digitalcollections.lib.washington.edu/digital/collection/dp/id/${dp}`;
 export function bestRecipeFor(lead: string): string | null {
   let best: { name: string; len: number } | null = null;
   for (const rc of RECIPES) for (const t of rc.terms ?? []) if (lead.includes(t) && (!best || t.length > best.len)) best = { name: rc.name, len: t.length };
@@ -94,21 +105,36 @@ export function makeGui(s: Settings, onChange: () => void, onRebuild: () => void
   const names = RECIPES.map((r) => r.name);
   const patternCtrl = gui.add(s, "pattern", names).name("Pattern");
   customDropdown(patternCtrl as unknown as Parameters<typeof customDropdown>[0]);
-  // lil-gui's options() destroys the controller and appends a new one to its parent,
-  // so the palette dropdown lives in its own folder and the reference is refreshed each time.
+  // The palette dropdown lives in its own folder: lil-gui 0.20 replaces the options of a
+  // controller in place, but older versions destroyed it and appended a new one to its parent,
+  // so the reference is refreshed each time and the sheet link is moved back after the dropdown.
   const palFolder = gui.addFolder("Palette");
-  let paletteCtrl = palFolder.add(s, "palette", palettesFor(s.pattern).map((p) => p.short!)).name("Sheet").onChange(onChange);
+  const currentPalette = () => PALETTES.find((p) => p.short === s.palette || p.name === s.palette);
+  const viewSheet = () => { const dp = dpNumber(currentPalette()); if (dp !== null) window.open(sheetUrl(dp), "_blank", "noopener"); };
+  const paletteChanged = () => { syncSheetLink(); onChange(); };
+  let paletteCtrl = palFolder.add(s, "palette", palettesFor(s.pattern).map((p) => p.short!)).name("Sheet").onChange(paletteChanged);
   customDropdown(paletteCtrl as unknown as Parameters<typeof customDropdown>[0]);
+  const sheetLink = palFolder.add({ viewSheet }, "viewSheet").name("View original sheet ↗");
+  const syncSheetLink = () => { if (dpNumber(currentPalette()) !== null) sheetLink.enable(); else sheetLink.disable(); };
+  // main.ts refreshes every controller's display after a programmatic change: keep the link in step
+  sheetLink.updateDisplay = () => { syncSheetLink(); return sheetLink; };
+  syncSheetLink();
   const refreshPalettes = () => {
     const opts = palettesFor(s.pattern).map((p) => p.short!);
     if (!opts.includes(s.palette)) s.palette = opts[0];
-    paletteCtrl = paletteCtrl.options(opts).name("Sheet").onChange(onChange);
-    customDropdown(paletteCtrl as unknown as Parameters<typeof customDropdown>[0]);
+    const next = paletteCtrl.options(opts);
+    if (next !== paletteCtrl) {
+      paletteCtrl = next.name("Sheet").onChange(paletteChanged);
+      customDropdown(paletteCtrl as unknown as Parameters<typeof customDropdown>[0]);
+      palFolder.$children.appendChild(sheetLink.domElement);
+    }
+    syncSheetLink();
   };
   patternCtrl.onChange(() => { refreshPalettes(); onRebuild(); });
   gui.add(s, "seed", 1, 9999, 1).name("Seed").onChange(onChange).listen();
   (gui as GUI & { refreshPalettes: () => void }).refreshPalettes = refreshPalettes;
   gui.add(s, "randomSeed").name("Random seed");
+  gui.add(s, "randomAll").name("Randomise everything");
 
   const bath = gui.addFolder("Bath & size");
   bath.add(s, "viscosity", 0, 1, 0.01).name("Size thinness").onChange(onChange);

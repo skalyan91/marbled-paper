@@ -90,7 +90,7 @@ Hit noHit(vec2 P) {
 // together with the uncovered remainder). In a wide footprint (stretched film) the pieces are
 // claimed analytically along the stretch axis v: each drop takes the exact sub-interval of the
 // footprint that lies inside its outline, and the trace point moves into what is left.
-#define MAXH 6
+#define MAXH 8
 struct Trace {
   vec2 S;
   mat2 J;
@@ -103,6 +103,7 @@ struct Trace {
   float tmid;     // interval position the trace point currently represents
   bool done;
   float fibre;    // paper fibre noise at this pixel, −1..1 (edge wobble)
+  float lost;     // footprint weight of chords that found no slot (redistributed at the end)
 };
 
 // leading right singular vector of a 2×2 (direction in the input space along which |J x| is largest)
@@ -170,7 +171,18 @@ void candidate(inout Trace t, inout vec2 g, inout mat2 Jg, inout bool stop, ivec
       ca = max(lo2, t1); cb = min(hi2, t2);
     }
     if (cb - ca > 0.004) {                  // even a hair-thin band gets its share of the pixel
-      claimed = true; wgt = cb - ca;
+      // The interval has no width across the footprint, so a streak running along it would be
+      // either wholly in or wholly out and break into dashes as it wanders across the pixel row.
+      // Weight the chord by the drop's coverage of the pixel's minor extent instead: the outline's
+      // distance across, in pixels, blurred by the bleed as in narrow mode.
+      vec2 gvu = gv / max(sqrt(A2), 1e-9);              // unit direction of the interval, in cells
+      float dPerp = length(q - dot(q, gvu) * gvu);       // distance from the drop centre to the interval line
+      vec2 gw = Jg * vec2(-t.v.y, t.v.x);                // cells per px across the footprint
+      float gwp = length(gw - dot(gw, gvu) * gvu);       // its component across the interval
+      float eW = (r - dPerp) / max(gwp, 1e-6);           // outline distance across, px (>0 inside)
+      float alphaW = A2 < 1e-12 ? 1.0 : smoothstep(-bw, bw, eW + uBleed.y * bw * t.fibre);
+      claimed = true; wgt = (cb - ca) * alphaW;
+      t.lost += (cb - ca) * (1.0 - alphaW);            // what lies beside the streak: shared out at the end
       // remainder: the larger of the two leftover pieces (the smaller is folded into the rest)
       float left = ca - lo2, right = hi2 - cb;
       if (left >= right) t.hi = ca; else t.lo = cb;
@@ -186,9 +198,16 @@ void candidate(inout Trace t, inout vec2 g, inout mat2 Jg, inout bool stop, ivec
     h.hit = true; h.layer = slot; h.cell = cc; h.u = q / r; h.color = int(floor(tx.a + 0.5));
     h.style = int(a.w + 0.5); h.param = c.z; h.ring = c.w; h.S = t.S; h.edge = (r - d) * cell; h.ePx = ePx;
     h.J = transpose(R) * Jg * cell;
-    if (t.nh < MAXH) { t.hs[t.nh] = h; t.ws[t.nh] = wgt; t.nh++; }
+    // In interval mode a drawn-out film crosses the footprint many times; chords of the same
+    // colour in the same layer are one piece (their paints have mingled below the pixel), so
+    // the sweep can claim the whole interval exactly instead of a random subset of its chords.
+    bool placed = false;
+    if (t.sweep) for (int k = 0; k < MAXH; k++) {
+      if (!placed && k < t.nh && t.hs[k].hit && t.hs[k].layer == slot && t.hs[k].color == h.color) { t.ws[k] += wgt; placed = true; }
+    }
+    if (!placed) { if (t.nh < MAXH) { t.hs[t.nh] = h; t.ws[t.nh] = wgt; t.nh++; } else t.lost += wgt; }
     if (t.sweep) {
-      if (t.hi - t.lo < 0.004 || t.nh >= MAXH) { stop = true; t.done = true; return; }
+      if (t.hi - t.lo < 0.004) { stop = true; t.done = true; return; }
       float nm = 0.5 * (t.lo + t.hi);
       g += (Jg * t.v) * (nm - t.tmid);      // move the trace point into the uncovered remainder
       t.tmid = nm;
@@ -375,7 +394,7 @@ void invStretch(inout Trace t, vec4 a) {
 
 Trace trace(vec2 P, float mmPerPx, float fibre, int start, int count) {
   Trace t;
-  t.S = P; t.J = mat2(mmPerPx); t.nh = 0; t.sweep = false; t.v = vec2(1.0, 0.0); t.lo = -0.5; t.hi = 0.5; t.tmid = 0.0; t.done = false; t.fibre = fibre;
+  t.S = P; t.J = mat2(mmPerPx); t.nh = 0; t.sweep = false; t.v = vec2(1.0, 0.0); t.lo = -0.5; t.hi = 0.5; t.tmid = 0.0; t.done = false; t.fibre = fibre; t.lost = 0.0;
   for (int k = 0; k < MAXH; k++) { t.hs[k] = noHit(P); t.ws[k] = 0.0; }
   for (int i = 0; i < MAX_OPS; i++) {
     if (i >= count || t.done) break;

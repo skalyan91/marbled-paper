@@ -66,6 +66,16 @@ const settings: Settings = {
   debug: DEBUG_MODES[0],
   savePng: () => savePng(),
   randomSeed: () => { settings.seed = Math.floor(Math.random() * 9999) + 1; markDirty(); },
+  randomAll: () => {
+    // as if the user had picked them: pattern defaults and the sheet list first, then the sheet and seed
+    const r = RECIPES[Math.floor(Math.random() * RECIPES.length)];
+    selectPattern(r.name);
+    const sheets = palettesFor(r.name);
+    settings.palette = sheets[Math.floor(Math.random() * sheets.length)].short!;
+    settings.seed = Math.floor(Math.random() * 9999) + 1;
+    gui.controllersRecursive().forEach((c) => c.updateDisplay());
+    markDirty();
+  },
 };
 if (!RECIPES.some((r) => r.name === settings.pattern)) settings.pattern = RECIPES[0].name;
 settings.palette = palettesFor(settings.pattern)[0].short!;
@@ -349,7 +359,7 @@ function selectPattern(name: string) {
   markDirty();
   return true;
 }
-// keyboard: space = pause, n/p = next/prev pattern, s = save, r = reseed
+// keyboard: space = pause, n/p = next/prev pattern, s = save, r = reseed, x = randomise everything
 window.addEventListener("keydown", (e) => {
   if (e.target instanceof HTMLInputElement) return;
   if (e.key === " ") { settings.animate = !settings.animate; markDirty(); }
@@ -359,6 +369,7 @@ window.addEventListener("keydown", (e) => {
     selectPattern(RECIPES[j].name);
   } else if (e.key === "s") savePng();
   else if (e.key === "r") settings.randomSeed();
+  else if (e.key === "x") settings.randomAll();
 });
 // touch: swipe left/right = next/previous pattern, two-finger tap = pause
 let swipe: { x: number; y: number; id: number } | null = null;

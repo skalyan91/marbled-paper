@@ -220,7 +220,7 @@ const PALETTES_RAW: Palette[] = [
 
 import { GENERATED } from "./palettes.generated";
 // A generated (re-measured) palette with the same key replaces the hand-written one.
-export const PALETTES: Palette[] = [...PALETTES_RAW.filter((p) => !GENERATED.some((g) => g.key === p.key)), ...GENERATED].map((p) => ({ ...p, short: p.name.replace(/:.*$/, "").replace(/\s*\(dp \d+\)$/, "") + " · " + p.source }));
+export const PALETTES: Palette[] = [...PALETTES_RAW.filter((p) => !GENERATED.some((g) => g.key === p.key)), ...GENERATED].map((p) => ({ ...p, short: p.name.replace(/:.*$/, "").replace(/\s*\(dp \d+(?: \(\+\d+\))?\)$/, "") + " · " + p.source }));
 
 // ---------------------------------------------------------------------------
 // Parameters coming from the GUI
