@@ -117,7 +117,7 @@ function buildProgram() {
   program = pr;
   gl.useProgram(pr);
   uni = {};
-  for (const n of ["uResolution", "uPxPerMm", "uTime", "uOpCount", "uOpCount2", "uUnderMode", "uDebug", "uCells", "uNoise", "uRowShift", "uPaper", "uTransfer", "uTransfer2", "uDry", "uSamples", "uBleed", "uPaperTex", "uSurface", "uProbe", "uGroundUnder", "uLayerStyle", "uInterleave"]) uni[n] = gl.getUniformLocation(pr, n);
+  for (const n of ["uResolution", "uPxPerMm", "uTime", "uOpCount", "uOpCount2", "uUnderMode", "uDebug", "uCells", "uNoise", "uRowShift", "uPaper", "uTransfer", "uTransfer2", "uDry", "uSamples", "uBleed", "uPaperTex", "uSurface", "uProbe", "uGroundUnder", "uLayerStyle", "uInterleave", "uSheetMean"]) uni[n] = gl.getUniformLocation(pr, n);
   gl.uniformBlockBinding(pr, gl.getUniformBlockIndex(pr, "Ops"), 0);
   gl.uniformBlockBinding(pr, gl.getUniformBlockIndex(pr, "Palette"), 1);
   gl.uniform1i(uni.uCells, 0);
@@ -386,6 +386,10 @@ function uploadScene(scene: Scene, palette: Palette) {
 
   const [pr, pgc, pb] = hexToRgb(palette.paper);
   gl.uniform4f(uni.uPaper, pr, pgc, pb, settings.paperAge);
+  // coverage-weighted mean colour of the sheet (equal weights where the sheet was not measured)
+  const mean = [0, 0, 0]; let wsum = 0;
+  for (const i of [palette.background, ...palette.spots]) { const pg = palette.pigments[i]; if (!pg) continue; const w = pg.frac ?? 10; const rgb = hexToRgb(pg.hex); for (let k = 0; k < 3; k++) mean[k] += rgb[k] * w; wsum += w; }
+  gl.uniform3f(uni.uSheetMean, mean[0] / Math.max(wsum, 1e-6), mean[1] / Math.max(wsum, 1e-6), mean[2] / Math.max(wsum, 1e-6));
   const t = scene.transfer;
   gl.uniform4f(uni.uTransfer, t.mode, t.amp * settings.transferAmp, (2 * Math.PI) / t.wavelength, (t.angle * Math.PI) / 180);
   gl.uniform4f(uni.uTransfer2, t.phase, t.wobble, scene.goldNet, scene.softPaper);

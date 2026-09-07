@@ -32,6 +32,7 @@ uniform vec4 uDry;        // grain, stretchLimit, groundFill, seed
 uniform vec4 uBleed;      // bleed mm, edge wobble, edge darkening, laid paper
 uniform vec4 uPaperTex;   // laid pitch mm, chain pitch mm, tooth, granulation
 uniform vec4 uSurface;    // wear (rubbed cover fibres), ...
+uniform vec3 uSheetMean;   // coverage-weighted mean colour of the sheet: what the trace could not resolve inside a footprint shows as this
 uniform ivec4 uInterleave; // (kx, ky, px, py): this pass shades the screen pixels x ≡ px (mod kx), y ≡ py (mod ky), one per texel of a target 1/kx × 1/ky the screen
 uniform vec4 uLayerStyle[8]; // per drop layer: style bits, style param, ring amplitude (constants of the sprinkle op, looked up at shading time)
 
@@ -175,22 +176,26 @@ void candidate(inout Trace t, inout vec2 g, inout mat2 Jg, inout bool stop, ivec
       float t1 = t.tmid + (-B2 - sq2) / A2, t2 = t.tmid + (-B2 + sq2) / A2;
       ca = max(lo2, t1); cb = min(hi2, t2);
     }
-    if (cb - ca > 0.004) {                  // even a hair-thin band gets its share of the pixel
-      // The interval has no width across the footprint, so a streak running along it would be
-      // either wholly in or wholly out and break into dashes as it wanders across the pixel row.
-      // Weight the chord by the drop's coverage of the pixel's minor extent instead: the outline's
-      // distance across, in pixels, blurred by the bleed as in narrow mode.
-      vec2 gvu = gv / max(sqrt(A2), 1e-9);              // unit direction of the interval, in cells
-      float dPerp = length(q - dot(q, gvu) * gvu);       // distance from the drop centre to the interval line
-      vec2 gw = Jg * vec2(-t.v.y, t.v.x);                // cells per px across the footprint
-      float gwp = length(gw - dot(gw, gvu) * gvu);       // its component across the interval
-      float eW = (r - dPerp) / max(gwp, 1e-6);           // outline distance across, px (>0 inside)
-      float alphaW = A2 < 1e-12 ? 1.0 : smoothstep(-bw, bw, eW + uBleed.y * bw * t.fibre);
-      claimed = true; wgt = (cb - ca) * alphaW;
-      t.lost += (cb - ca) * (1.0 - alphaW);            // what lies beside the streak: shared out at the end
-      // remainder: the larger of the two leftover pieces (the smaller is folded into the rest)
+    if (cb > ca) {
+      if (cb - ca > 0.004) {                // even a hair-thin band gets its share of the pixel
+        // The interval has no width across the footprint, so a streak running along it would be
+        // either wholly in or wholly out and break into dashes as it wanders across the pixel row.
+        // Weight the chord by the drop's coverage of the pixel's minor extent instead: the outline's
+        // distance across, in pixels, blurred by the bleed as in narrow mode.
+        vec2 gvu = gv / max(sqrt(A2), 1e-9);              // unit direction of the interval, in cells
+        float dPerp = length(q - dot(q, gvu) * gvu);       // distance from the drop centre to the interval line
+        vec2 gw = Jg * vec2(-t.v.y, t.v.x);                // cells per px across the footprint
+        float gwp = length(gw - dot(gw, gvu) * gvu);       // its component across the interval
+        float eW = (r - dPerp) / max(gwp, 1e-6);           // outline distance across, px (>0 inside)
+        float alphaW = A2 < 1e-12 ? 1.0 : smoothstep(-bw, bw, eW + uBleed.y * bw * t.fibre);
+        claimed = true; wgt = (cb - ca) * alphaW;
+        t.lost += (cb - ca) * (1.0 - alphaW);            // what lies beside the streak: unresolved, shown as the sheet mean
+      } else t.lost += cb - ca;                          // a chord too thin to trace: still paint, not bare ground
+      // remainder: the larger of the two leftover pieces; the smaller is not traced further, so it too
+      // is unresolved paint (folding it into the uncovered rest showed bare ground as a stipple wherever
+      // a film is drawn out far below the pixel: the fans of a Feather)
       float left = ca - lo2, right = hi2 - cb;
-      if (left >= right) t.hi = ca; else t.lo = cb;
+      if (left >= right) { t.hi = ca; t.lost += max(right, 0.0); } else { t.lo = cb; t.lost += max(left, 0.0); }
     }
   } else {
     // narrow footprint: analytic edge coverage across the outline, blurred by the bleed
@@ -426,10 +431,12 @@ Trace trace(vec2 P, float mmPerPx, float fibre, int start, int count) {
   float rest = t.sweep ? max(t.hi - t.lo, 0.0) : max(1.0 - used, 0.0);
   if (t.nh == 0) rest = 1.0;
   if (rest > 0.01 && t.nh < MAXH) { Hit hr = noHit(P); hr.S = t.S; hr.J = t.J; t.hs[t.nh] = hr; t.ws[t.nh] = rest; t.nh++; }
-  // normalise
+  // normalise; what found no slot (a film drawn out into more chords than MAXH across the footprint) is kept
+  // as a fraction, to be shown as the sheet's mean colour rather than as a random subset of the chords
   float tot = 0.0;
   for (int k = 0; k < MAXH; k++) tot += t.ws[k];
   for (int k = 0; k < MAXH; k++) t.ws[k] /= max(tot, 1e-6);
+  t.lost = t.lost / max(t.lost + tot, 1e-6);
   return t;
 }
 
@@ -657,6 +664,8 @@ Shaded shadeChain(Trace t, vec2 P, vec3 paper, float lodScr, float tooth, int gf
   s.cov = 0.0; s.rgb = vec3(0.0); s.stretch = ps[0].stretch;
   for (int k = 0; k < MAXH; k++) { float cw = t.ws[k] * ps[k].cov; s.cov += cw; s.rgb += ps[k].rgb * cw; }
   s.rgb = s.cov > 1e-4 ? s.rgb / s.cov : ps[0].rgb;
+  // the unresolved share of the footprint: the paint drawn out below the pixel, averaged
+  if (t.lost > 0.0) { s.rgb = mix(s.rgb, uSheetMean, t.lost); s.cov = mix(s.cov, 1.0, t.lost); }
   rgbOut = s.rgb;
   return s;
 }

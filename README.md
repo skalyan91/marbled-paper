@@ -112,7 +112,11 @@ measured on the scans: ≈1.2–1.5 spacings for fine combs, 2–6 for the get-g
   share a piece, so a film drawn out into many hair lines is averaged exactly rather than
   sampled; and each chord is weighted by the drop's coverage of the pixel across the interval,
   so a streak running along the stretch axis renders as a faint continuous line instead of
-  breaking into dashes.
+  breaking into dashes. What the footprint cannot resolve (chords beyond the eight, chords
+  thinner than 0.4 % of the footprint, the smaller leftover beside a claimed chord) is kept as
+  an unresolved share and shown as the coverage-weighted mean colour of the sheet, so a film
+  drawn out far below the pixel, as in the fans of a Feather, averages instead of stippling
+  with bare ground.
 - Between throws the bath keeps moving: shears applied between colour layers give each
   colour the elongation measured for it on the sheet, so earlier colours are more deformed.
 - Feather is a fine comb (hair lines) followed by a comb with widely set teeth drawn across

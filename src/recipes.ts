@@ -591,11 +591,15 @@ const roundColours = (pal: Palette) => pal.spots.filter((c) => (pal.pigments[c].
  *  tine's path (the quill) and running along it, alternately one way and the other between the
  *  periodic quills. Antique straight adds a shower of fine dots; Zebra is the same wide comb on a
  *  plain stone base. */
-const featherBase = (b: Builder, exclude: number[], spacing = 40) => {
-  // small, dense spots: the hair lines interleave every colour at the millimetre scale (dp 131, 229)
-  b.turkish({ cell: 7, sizeMul: 1.0, densityMul: 1.2, gallDots: false, swirl: 0, exclude });   // no residual swirl: the combs supply all the elongation
-  b.comb(-90, 2, { ripple: 4, L: 0.5 });        // fine comb down the sheet: hair lines
-  b.comb2(0, spacing, { ripple: 3, L: 5, kernel: "wake" });   // wide comb across and back, halving, pulled ~3 spacings; a ~5 mm wake moves with each tine, so the lines are drawn out, not sheared away
+const featherBase = (b: Builder, exclude: number[], spacing = 55) => {
+  // The measured spot sizes are the fragments left after the drawing; the spots thrown were several times
+  // larger (as for every combed sheet). No residual swirl: the combs supply all the elongation.
+  b.turkish({ cell: 9, sizeMul: 3, densityMul: 0.5, gallDots: false, swirl: 0, exclude });
+  b.comb(-90, 6, { ripple: 1.5, L: 2 });        // a 6 mm comb down the sheet breaks the spots into bands 1–5 mm wide (dp 29)
+  // Wide comb across and back, halving, drawn the length of the bath: the paint in each tine's narrow wake travels
+  // the whole stroke, and even midway between tines the lines still cross the gap at ~45° (dp 29: quills ~60 mm
+  // apart, alternately peaks and troughs). ripple 7 with a 2.5 mm wake is a drag of ~450 mm at the tine.
+  b.comb2(0, spacing, { ripple: 7, L: 2.5, kernel: "wake" });
   return b;
 };
 const nonpareilBase = (b: Builder) => {
@@ -675,7 +679,7 @@ export const RECIPES: Recipe[] = [
   { name: "Zebra", streaks: "v", group: "Sprinkled", palette: "dp61", palettes: ["dp61", "antique19"], terms: ["zebra"], defaults: { ...D19, stretchLimit: 150 }, note: "Turkish base; a comb with one set of teeth drawn through twice, down and back up with the second pass halving the first, pulls the colours into long flowing bands (gezogener Achat); then one or more colours sprinkled or splashed on as large drops that sit on the bands (Wolfe and Miura; dp 15, 386).",
     build: (p, pal) => { const b = new Builder(p, pal); const round = roundColours(pal);
       b.turkish({ cell: 12, sizeMul: 2.2, densityMul: 0.35, gallDots: false, swirl: 0, exclude: round });
-      b.comb2(-90, 18, { ripple: 4, L: 4, kernel: "wake" });   // as the Feather's wide comb, on the plain stone base: bands swooping into the periodic tine paths
+      b.comb2(-90, 18, { ripple: 5, L: 2, kernel: "wake" });   // as the Feather's wide comb, on the plain stone base: bands swooping into the periodic tine paths
       for (const c of round) b.sprinkleStats(c, b.statsOf(c), { anim: 0.7 });   // the large final drops
       if (!round.length && !hasWhiteSpot(pal)) b.sprinkleStats(pal.white, b.statsOf(pal.white, { perCm2: 0.5, d50: 2.4, wk: 0.9 }), { anim: 0.7 });
       return b.drift().scene(); } },
