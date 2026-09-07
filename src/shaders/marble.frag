@@ -285,31 +285,37 @@ void invSprinkle(inout Trace t, vec4 a, vec4 b, vec4 c, vec4 d4) {
   if (!t.done) { t.S = b.xy + transpose(R) * (g * cell); t.J = transpose(R) * Jg * cell; }
 }
 
-// a=(type,theta,s,o) b=(z,L,m,lam) c=(mean,...)
+// a=(type,theta,s,o) b=(z,L,kernel,...) c=(mean,...)
+// Two regimes of a comb drawn through a viscous size, in the coordinate n across the stroke:
+// - arc (kernel 0): the paint pushed ahead of each tine forms a front that bows between the
+//   neighbouring tines and meets the next front in a cusp; the profile is a chain of arcs,
+//   K = sqrt(1 − 4f² + ε) with f the position in the gap. Broad rounded tongues, cusped valleys,
+//   the flanks drawn into hair lines (nonpareil, dp 82; the arches of a wide comb, dp 274).
+//   A cusped bell (exponential) gives pointed tongues and straight-sided zigzags instead.
+// - wake (kernel 1): widely set teeth pulled hard. Each tine carries a wake of width L and the
+//   drag falls off as ~L/d beyond it, K = (1 + (d/L)²)^-1/2, the far field of a rod drawn through
+//   a viscous fluid; a line crossing the stroke becomes a hyperbola asymptotic to the tine's path:
+//   the barbs of a Feather swoop into the quills and run along them (dp 229). The nine nearest
+//   tines are summed (the set changes at the mid-gap where the two ends contribute equally).
+// The mean drag (c.x) is removed in both.
 void invComb(inout Trace t, vec4 a, vec4 b, vec4 c) {
   vec2 M = vec2(cos(a.y), sin(a.y));
   vec2 N = vec2(-M.y, M.x);
   float s = a.z, L = b.y;
   float n = dot(t.S, N) - a.w;
-  float tt = n / s;
-  float f = fract(tt);
-  float us = exp(-s / L);
-  float ea = exp(-f * s / L), eb = exp(-(1.0 - f) * s / L);
-  float sumExp = (ea + eb) / (1.0 - us);
-  float dExp = (eb - ea) / (L * (1.0 - us));
-  float sum = sumExp, dsum = dExp;
-  if (b.z > 0.0) {
-    float k0 = floor(tt);
-    float sumLor = 0.0, dLor = 0.0;
-    for (int j = -2; j <= 2; j++) {
-      float dd = n - (k0 + float(j)) * s;
-      float den = abs(dd) + b.w;
-      sumLor += b.w / den;
-      dLor -= b.w * sign(dd) / (den * den);
+  float sum = 0.0, dsum = 0.0;
+  if (b.z < 0.5) {
+    float f = fract(n / s + 0.5) - 0.5;          // −0.5..0.5 across the gap, 0 at the tine
+    sum = sqrt(max(1.0 - 4.0 * f * f, 0.0) + 0.02);
+    dsum = -4.0 * f / (2.0 * sum * s);
+  } else {
+    float kn = floor(n / s + 0.5);
+    for (int j = -4; j <= 4; j++) {
+      float u = (n - (kn + float(j)) * s) / L;
+      float q = inversesqrt(1.0 + u * u);
+      sum += q;
+      dsum -= u * q * q * q / L;
     }
-    float peak = 1.0 + 2.0 * (b.w / (s + b.w)) + 2.0 * (b.w / (2.0 * s + b.w));
-    sum = mix(sumExp, sumLor / peak, b.z);
-    dsum = mix(dExp, dLor / peak, b.z);
   }
   t.S -= b.x * (sum - c.x) * M;
   t.J = rank1(t.J, M, N, -b.x * dsum);
