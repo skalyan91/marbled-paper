@@ -31,6 +31,7 @@ uniform vec4 uTransfer2;  // phase, wobble, goldNet, softPaper
 uniform vec4 uDry;        // grain, stretchLimit, groundFill, seed
 uniform vec4 uBleed;      // bleed mm, edge wobble, edge darkening, laid paper
 uniform vec4 uPaperTex;   // laid pitch mm, chain pitch mm, tooth, granulation
+uniform vec4 uSurface;    // wear (rubbed cover fibres), ...
 
 layout(std140) uniform Ops { vec4 op[MAX_OPS * 4]; };
 layout(std140) uniform Palette { vec4 col[16]; vec4 pig[16]; };
@@ -421,9 +422,15 @@ vec3 paperColor(vec2 P, float soft, float lodScr, out float fibre, out float too
   float fine = tnoise(P * 0.35, lodFor(lodScr, 0.35)).r - 0.5;
   float mid = tnoise(P * 0.09 + 0.3, lodFor(lodScr, 0.09)).a - 0.5;
   float low = tnoise(P * 0.004 + 0.11, lodFor(lodScr, 0.004)).g - 0.5;
+  // surface relief at fixed physical scales, whatever the zoom: fibre flocs (0.4 mm), formation
+  // mottle (1 and 0.5 mm) and fibre fuzz (0.2 and 0.1 mm). Measured on 400 ppi scans of 19th-c.
+  // book covers, every colour carries this mottle; it is what makes the sheet read as paper.
+  float floc = tnoise(P * 0.078 + 0.53, lodFor(lodScr, 0.078)).b - 0.5;
+  float form = tnoise(P * 0.125 + 0.21, lodFor(lodScr, 0.125)).g - 0.5;
+  float fuzz = tnoise(P * 0.078 + 0.77, lodFor(lodScr, 0.078)).a - 0.5;
   fibre = clamp(fib * 1.5 + fine * 0.8, -1.0, 1.0);
-  tooth = clamp(0.5 + 0.9 * fine + 0.5 * mid, 0.0, 1.0);
-  vec3 c = uPaper.rgb * (1.0 + 0.08 * fib + 0.05 * fine + 0.04 * mid);
+  tooth = clamp(0.5 + 1.2 * floc + 0.9 * form + 0.8 * fuzz + 0.35 * fib + 0.3 * fine + 0.3 * mid, 0.0, 1.0);
+  vec3 c = uPaper.rgb * (1.0 + 0.08 * fib + 0.05 * fine + 0.04 * mid + 0.06 * floc + 0.05 * form + 0.04 * fuzz);
   // laid and chain lines of hand-made paper (visible where the sheet is thinner)
   if (uBleed.w > 0.5) {
     float laid = 0.5 + 0.5 * sin(6.2831853 * P.y / uPaperTex.x + 0.7 * fine);
@@ -559,6 +566,7 @@ Shaded shadePattern(Hit h, vec2 P, vec3 paper, float lodScr, float tooth, int gf
       float gsig = stretchOf(h.J);
       float gfilm = pow(clamp(uDry.y / gsig, 0.0, 1.0), 0.35);
       s.cov = pig[gf].x * mix(0.75 + 0.25 * tooth, 1.0, gfilm * 0.6) * transferShade(P, lodScr);
+      s.cov *= (1.0 - uPaperTex.z * 0.4 * (0.5 - tooth)) * (1.0 - uSurface.x * smoothstep(0.78, 0.92, tooth));   // same take-up and wear as a drop
       s.stretch = gsig;
     }
     return s;
@@ -575,8 +583,10 @@ Shaded shadePattern(Hit h, vec2 P, vec3 paper, float lodScr, float tooth, int gf
   float g = 0.6 * gA + 0.4 * gB;
   float grain = uDry.x * pg.y;
   float cov = pg.x * clamp(0.85 + 0.15 * film + (g - 0.5) * grain * (1.0 - film) * 0.6, 0.0, 1.0);
-  // absorption into the sheet: a mild, stretch-independent modulation by the paper tooth
-  cov *= 1.0 - uPaperTex.z * 0.12 * (0.5 - tooth);
+  // absorption into the sheet: the film takes unevenly on the fibre relief (stretch-independent)
+  cov *= 1.0 - uPaperTex.z * 0.4 * (0.5 - tooth);
+  // wear: on a handled cover the raised fibres rub bare, pale specks on every colour
+  cov *= 1.0 - uSurface.x * smoothstep(0.78, 0.92, tooth);
   // granulation: heavy pigments settle in the hollows (darker), pale ones stay even
   base *= 1.0 - uPaperTex.w * pg.y * 0.25 * (tooth - 0.5);
   // pigment texture (slight value variation, stronger for earths)

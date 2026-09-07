@@ -28,6 +28,7 @@ export interface Settings {
   edgeDark: number;
   tooth: number;
   granulation: number;
+  wear: number; // rubbed cover fibres
   transferAmp: number;
   debug: string;
   savePng: () => void;
@@ -127,6 +128,7 @@ export function makeGui(s: Settings, onChange: () => void, onRebuild: () => void
   dry.add(s, "paperAge", 0, 1, 0.01).name("Paper age").onChange(onChange);
   dry.add(s, "tooth", 0, 1, 0.01).name("Paper tooth").onChange(onChange);
   dry.add(s, "granulation", 0, 1, 0.01).name("Granulation").onChange(onChange);
+  dry.add(s, "wear", 0, 1, 0.01).name("Wear (cover rubbing)").onChange(onChange);
   dry.add(s, "bleed", 0, 0.6, 0.01).name("Edge bleed (mm)").onChange(onChange);
   dry.add(s, "edgeWobble", 0, 1.5, 0.01).name("Edge feathering").onChange(onChange);
   dry.add(s, "edgeDark", 0, 0.4, 0.01).name("Edge darkening").onChange(onChange);

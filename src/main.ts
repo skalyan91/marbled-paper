@@ -61,6 +61,7 @@ const settings: Settings = {
   edgeDark: 0.12,
   tooth: 0.6,
   granulation: 0.6,
+  wear: 0.35,
   transferAmp: 1.0,
   debug: DEBUG_MODES[0],
   savePng: () => savePng(),
@@ -101,7 +102,7 @@ function buildProgram() {
   program = pr;
   gl.useProgram(pr);
   uni = {};
-  for (const n of ["uResolution", "uPxPerMm", "uTime", "uOpCount", "uOpCount2", "uUnderMode", "uDebug", "uCells", "uNoise", "uRowShift", "uPaper", "uTransfer", "uTransfer2", "uDry", "uSamples", "uBleed", "uPaperTex", "uProbe", "uGroundUnder"]) uni[n] = gl.getUniformLocation(pr, n);
+  for (const n of ["uResolution", "uPxPerMm", "uTime", "uOpCount", "uOpCount2", "uUnderMode", "uDebug", "uCells", "uNoise", "uRowShift", "uPaper", "uTransfer", "uTransfer2", "uDry", "uSamples", "uBleed", "uPaperTex", "uSurface", "uProbe", "uGroundUnder"]) uni[n] = gl.getUniformLocation(pr, n);
   gl.uniformBlockBinding(pr, gl.getUniformBlockIndex(pr, "Ops"), 0);
   gl.uniformBlockBinding(pr, gl.getUniformBlockIndex(pr, "Palette"), 1);
   gl.uniform1i(uni.uCells, 0);
@@ -243,6 +244,7 @@ function uploadScene(scene: Scene, palette: Palette) {
   gl.uniform1i(uni.uSamples, settings.antialias ? 1 : 0);
   gl.uniform4f(uni.uBleed, settings.bleed, settings.edgeWobble, settings.edgeDark, palette.laid ? 1 : 0);
   gl.uniform4f(uni.uPaperTex, 1.15, 26, settings.tooth, settings.granulation);
+  gl.uniform4f(uni.uSurface, settings.wear, 0, 0, 0);
 }
 
 let customScene: { scene: Scene; pal: Palette } | null = null;
@@ -317,7 +319,7 @@ function savePng() {
 }
 
 // ----------------------------------------------------------------- init
-const BASE_DEFAULTS = { viscosity: 0.35, gall: 1, density: 1, combScale: 1, combStrength: 1, curlStrength: 1, transferAmp: 1, paperAge: 0.35, bleed: 0.12, edgeDark: 0.12, grain: 0.7, tooth: 0.6, granulation: 0.6, drift: 1.2, stretchLimit: 60, gapFill: 0.7 };
+const BASE_DEFAULTS = { viscosity: 0.35, gall: 1, density: 1, combScale: 1, combStrength: 1, curlStrength: 1, transferAmp: 1, paperAge: 0.35, bleed: 0.12, edgeDark: 0.12, grain: 0.7, tooth: 0.6, granulation: 0.6, wear: 0.35, drift: 1.2, stretchLimit: 60, gapFill: 0.7 };
 function applyDefaults(name: string) {
   const r = RECIPES.find((x) => x.name === name);
   if (!r) return;

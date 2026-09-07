@@ -105,8 +105,13 @@ measured on the scans: ≈1.2–1.5 spacings for fine combs, 2–6 for the get-g
 
 - Paper: cream base with anisotropic fibre noise, fine tooth and a low-frequency age tint;
   pre-1800 palettes render hand-made laid paper (laid lines 1.15 mm, chain lines 26 mm).
-- Absorption: thin films take only on the fibre tops, thick films fill the hollows; heavy
+- Surface relief at fixed physical scales, whatever the zoom: fibre flocs (0.4 mm), formation
+  mottle (1 and 0.5 mm) and fibre fuzz (0.2 and 0.1 mm). Every film takes unevenly on this
+  relief, so each colour carries the mottle that 400 ppi scans of 19th-century book covers
+  show inside every colour (the sheets in the collection were mostly cover papers). Heavy
   pigments granulate (settle darker in the hollows), pale ones stay even.
+- Wear: on a handled cover the raised fibres rub bare, leaving pale specks on every colour
+  (the "Wear" control).
 - Where wet colours meet, the edge is blurred over a bleed width (default 0.12 mm) that
   wobbles with the fibres; inside the bleed zone the two pigments mingle (subtractive mix)
   and pile up into a slightly darker line.
