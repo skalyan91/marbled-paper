@@ -616,6 +616,21 @@ const featherBase = (b: Builder, exclude: number[], spacing = 55) => {
   b.still = false;
   return b;
 };
+/** Zebra base (dp 15, 386): a stone base of the band colours, then a comb with widely set teeth drawn down and
+ *  back up, halving, with the wake kernel: bold bands 3–6 mm wide swooping into the tine paths. The colours in
+ *  `round` are held back for the throws that follow. On sheets where the mixture model labelled the most abundant
+ *  pale colour the ground, that colour is the large final drops instead and the ground film under the bands is the
+ *  darkest colour; the pale colour's index is returned for the caller to throw. The base never animates. */
+const zebraBase = (b: Builder, round: number[]) => {
+  const pal = b.pal;
+  b.still = true;
+  const pale = round.length ? undefined : pal.background;
+  const ground = pale === undefined ? undefined : pal.spots.reduce((a, c) => (luma(pal.pigments[c].hex) < luma(pal.pigments[a].hex) ? c : a), pal.spots[0]);
+  b.turkish({ cell: 16, sizeMul: 6, densityMul: 0.2, gallDots: false, swirl: 0, exclude: round, shape: 2.5, ground });
+  b.comb2(-90, 18, { ripple: 1.8, L: 1.5, kernel: "wake" });
+  b.still = false;
+  return pale;
+};
 const nonpareilBase = (b: Builder) => {
   b.turkish({ cell: 14, ...COMBED });
   b.comb2(0, 22, { ripple: 2.2 }); // wide comb drawn horizontally twice ("get-gel"): long streaks
@@ -692,16 +707,7 @@ export const RECIPES: Recipe[] = [
 
   { name: "Zebra", streaks: "v", group: "Sprinkled", palette: "dp61", palettes: ["dp61", "antique19"], terms: ["zebra"], defaults: { ...D19, stretchLimit: 1e5, drift: 0 }, note: "Turkish base; a comb with one set of teeth drawn through twice, down and back up with the second pass halving the first, pulls the colours into long flowing bands (gezogener Achat); then one or more colours sprinkled or splashed on as large drops that sit on the bands (Wolfe and Miura; dp 15, 386).",
     build: (p, pal) => { const b = new Builder(p, pal); const round = roundColours(pal);
-      b.still = true;   // the drawn bands never move; only the drops thrown onto them animate
-      // On dp 15 and 386 the sheet's most abundant pale colour is the large final drops, which the mixture model
-      // labelled the ground; the ground film under the bands is then the darkest colour (black on dp 15), and
-      // the pale colour is held back for the end.
-      const pale = round.length ? undefined : pal.background;
-      const ground = pale === undefined ? undefined : pal.spots.reduce((a, c) => (luma(pal.pigments[c].hex) < luma(pal.pigments[a].hex) ? c : a), pal.spots[0]);
-      // bold bands 3–6 mm wide (dp 15): spots 6× the fragments, of one size, and a 1.5 mm core on the comb
-      b.turkish({ cell: 16, sizeMul: 6, densityMul: 0.2, gallDots: false, swirl: 0, exclude: round, shape: 2.5, ground });
-      b.comb2(-90, 18, { ripple: 1.8, L: 1.5, kernel: "wake" });   // as the Feather's wide comb, on the plain stone base: bands swooping into the periodic tine paths
-      b.still = false;
+      const pale = zebraBase(b, round);
       // The large final drops. On dp 15 and 386 they are the sheet's most abundant pale colour, which the mixture
       // model labelled the ground: it is thrown again last as large even drops that sit on the bands.
       for (const c of round) b.sprinkleStats(c, b.statsOf(c), { anim: 0.7 });
@@ -758,22 +764,18 @@ export const RECIPES: Recipe[] = [
       for (const c of eyes) { ensureStats(pal, c, 8, 0.5); b.sprinkleStats(c, b.statsOf(c, { perCm2: 0.5, d50: 8 }), { style: STYLE.TIGER, styleParam: 1 }); }
       return b.drift().scene(); } },
 
-  { name: "Dahlia", streaks: "h", group: "Dispersant", palette: "dp352", palettes: ["dp352"], terms: ["dahlia"], defaults: { ...D19 }, note: "Zebra base: the streak colours combed once across the sheet into long wavy bands; then large gall-heavy teal drops thrown on top, each speckled with pale gall spots, the bands flowing round them; paler round drops and small white specks last (dp 352, after Miura).",
+  { name: "Dahlia", streaks: "v", group: "Dispersant", palette: "dp352", palettes: ["dp352"], terms: ["dahlia"], defaults: { ...D19, stretchLimit: 1e5, drift: 0 }, note: "A Zebra base; then a colour mixed with ox gall thrown on: large drops that push the bands aside, gall opening pale spots inside them; then a second colour swirled on through a sieve and a third lightly sprinkled (Miura; dp 352).",
     build: (p, pal) => { const b = new Builder(p, pal);
       // The dahlias are the big round drops (least elongated, largest coverage); paler round drops thrown after them sit on top.
-      const round = pal.spots.filter((c) => (pal.pigments[c].el ?? 9) < 2.2);
+      const round = roundColours(pal);
       const teal = pal.special ?? (round.length ? round.reduce((a, c) => ((pal.pigments[c].frac ?? 0) > (pal.pigments[a].frac ?? 0) ? c : a), round[0]) : pal.spots[pal.spots.length - 1]);
-      // Zebra base of the streak colours only (the round colours come later): large Turkish spots, then one
-      // fine comb drawn across the sheet along a slow wave, so every spot is drawn out into a long band
-      // (dp 352: bands 1–3 mm wide, waves ~70 mm long, ~6 mm high).
-      const nStreak = pal.spots.findIndex((c) => round.includes(c));
-      b.turkish({ cell: 12, sizeMul: 2.4, densityMul: 0.3, gallDots: false, spots: nStreak > 0 ? nStreak : undefined });
-      b.wavyComb(0, 3, 6, 70, { alternate: false, ripple: 6, L: 4 }); // one hard pull: every spot drawn out into a band many times its length
+      const pale = zebraBase(b, round.length ? round : [teal]);
       // the dahlias: gall-heavy drops thrown onto the combed bath push the bands aside; gall opens pale spots inside them.
       // Their sizes are even (8–20 mm on dp 352), so the shape is fixed rather than the heavy-tailed fit of the scan.
       b.sprinkleStats(teal, { ...b.statsOf(teal), wk: 1.6, sig: 0.3 }, { style: STYLE.GALLDOTS, styleParam: 1, anim: 0.8 });
-      for (const gb of round) if (gb !== teal) b.sprinkleStats(gb, b.statsOf(gb)); // pale blobs thrown onto the dahlias
-      if (!hasWhiteSpot(pal)) b.sprinkleStats(pal.white, b.statsOf(pal.white, { perCm2: 0.8, d50: 1.2, wk: 1.0 }), { anim: 1.2 });
+      for (const gb of round) if (gb !== teal) b.sprinkleStats(gb, b.statsOf(gb)); // pale blobs swirled on through the sieve
+      if (pale !== undefined) b.sprinkleStats(pale, { perCm2: 0.05, d50: 19, sig: 0.3, wk: 2.5 }, { anim: 0.7 });
+      if (!hasWhiteSpot(pal)) b.sprinkleStats(pal.white, b.statsOf(pal.white, { perCm2: 0.8, d50: 1.2, wk: 1.0 }), { anim: 1.2 });   // the light sprinkle
       return b.drift().scene(); } },
   { name: "Spanish", group: "Transfer", palette: "spanish19", palettes: ["spanish19", "dp322", "dp246", "dp143", "dp295"], terms: ["spanish"], defaults: { ...D19, transferAmp: 1 }, note: "Turkish; the paper is rocked as it is laid: diagonal shaded ripples.",
     build: (p, pal) => { const b = new Builder(p, pal); b.turkish({ cell: 22, ringed: true }); b.drift(); b.shear(35, 0.9, 5.5, 0);
