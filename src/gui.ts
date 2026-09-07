@@ -38,8 +38,10 @@ export interface Settings {
 
 export const DEBUG_MODES = ["final", "hit id", "source coords", "stretch", "coverage", "paper only", "AA pieces", "flat ids", "probe", "weights", "piece0", "factors"];
 
-/** Replace the native <select> popup of a lil-gui option controller with a panel-styled list. */
-function customDropdown(ctrl: { $select: HTMLSelectElement; $widget: HTMLElement; $display: HTMLElement; setValue: (v: unknown) => void; _values: unknown[]; _names: string[] }) {
+/** Replace the native <select> popup of a lil-gui option controller with a panel-styled list.
+ *  `thumbs`, if given, returns one thumbnail URL (or null) per option; the images are fetched by
+ *  the viewer's browser from their source when the list opens, nothing is stored here. */
+function customDropdown(ctrl: { $select: HTMLSelectElement; $widget: HTMLElement; $display: HTMLElement; setValue: (v: unknown) => void; _values: unknown[]; _names: string[] }, thumbs?: () => (string | null)[]) {
   const sel = ctrl.$select;
   sel.style.pointerEvents = "none";
   sel.tabIndex = -1;
@@ -53,10 +55,18 @@ function customDropdown(ctrl: { $select: HTMLSelectElement; $widget: HTMLElement
     list.className = "marble-dropdown";
     const r = ctrl.$widget.getBoundingClientRect();
     list.style.left = `${r.left}px`; list.style.top = `${r.bottom + 2}px`; list.style.minWidth = `${r.width}px`;
+    const urls = thumbs?.();
     ctrl._names.forEach((name, i) => {
       const item = document.createElement("div");
       item.className = "item" + (sel.selectedIndex === i ? " selected" : "");
-      item.textContent = name;
+      if (urls) {
+        const url = urls[i];
+        const box = document.createElement(url ? "img" : "span");
+        box.className = "thumb";
+        if (url && box instanceof HTMLImageElement) { box.src = url; box.alt = ""; box.loading = "lazy"; box.addEventListener("error", () => box.classList.add("missing")); }
+        item.appendChild(box);
+      }
+      item.appendChild(document.createTextNode(name));
       item.addEventListener("click", () => { ctrl.setValue(ctrl._values[i]); close(); });
       list!.appendChild(item);
     });
@@ -120,6 +130,8 @@ function inlineLink(ctrl: { $name: HTMLElement }, glyph: string, title: string) 
 
 /** Item page of a sheet in the UW Decorated and Decorative Paper collection. */
 export const sheetUrl = (dp: number) => `https://digitalcollections.lib.washington.edu/digital/collection/dp/id/${dp}`;
+/** A tiny square thumbnail of a sheet, served by the collection's IIIF image server (40 px for 20 css px at 2×). */
+export const thumbUrl = (dp: number) => `https://digitalcollections.lib.washington.edu/iiif/2/dp:${dp}/square/40,/0/default.jpg`;
 export function bestRecipeFor(lead: string): string | null {
   let best: { name: string; len: number } | null = null;
   for (const rc of RECIPES) for (const t of rc.terms ?? []) if (lead.includes(t) && (!best || t.length > best.len)) best = { name: rc.name, len: t.length };
@@ -137,8 +149,9 @@ export function makeGui(s: Settings, onChange: () => void, onRebuild: () => void
   const palFolder = gui.addFolder("Palette");
   const currentPalette = () => PALETTES.find((p) => p.short === s.palette || p.name === s.palette);
   const paletteChanged = () => { syncSheetLink(); onChange(); };
+  const sheetThumbs = () => palettesFor(s.pattern).map((p) => { const dp = dpNumber(p); return dp === null ? null : thumbUrl(dp); });
   let paletteCtrl = palFolder.add(s, "palette", palettesFor(s.pattern).map((p) => p.short!)).name("Sheet").onChange(paletteChanged);
-  customDropdown(paletteCtrl as unknown as Parameters<typeof customDropdown>[0]);
+  customDropdown(paletteCtrl as unknown as Parameters<typeof customDropdown>[0], sheetThumbs);
   const LINK_TITLE = "View the original sheet in the UW catalogue";
   let sheetLink = inlineLink(paletteCtrl, "↗", LINK_TITLE);
   const syncSheetLink = () => {
@@ -156,7 +169,7 @@ export function makeGui(s: Settings, onChange: () => void, onRebuild: () => void
     const next = paletteCtrl.options(opts);
     if (next !== paletteCtrl) {
       paletteCtrl = next.name("Sheet").onChange(paletteChanged);
-      customDropdown(paletteCtrl as unknown as Parameters<typeof customDropdown>[0]);
+      customDropdown(paletteCtrl as unknown as Parameters<typeof customDropdown>[0], sheetThumbs);
       sheetLink = inlineLink(paletteCtrl, "↗", LINK_TITLE);
     }
     syncSheetLink();

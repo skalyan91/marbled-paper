@@ -163,7 +163,9 @@ part of this repository because they operate on the collection's images.
   Miura". The collection's images are provided by the library for reference purposes only
   and may not be reproduced; accordingly no scan, thumbnail or crop is included here. Each
   palette carries the catalogue item number of the sheet it was measured from (`source:
-  "dp 370"` and the like) so the original can be consulted.
+  "dp 370"` and the like) so the original can be consulted: the ↗ beside the Sheet control
+  opens the catalogue page, and the tiny thumbnails in the Sheet menu are fetched by your
+  browser from the collection's own IIIF image server when the menu opens.
 - **Libraries.** [Vite](https://vitejs.dev/), [TypeScript](https://www.typescriptlang.org/)
   and [lil-gui](https://lil-gui.georgealways.com/) for the panel. The shader itself has no
   dependencies.

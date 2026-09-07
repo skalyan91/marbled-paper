@@ -17,7 +17,9 @@
       .marble-dropdown { position: fixed; z-index: 5000; max-height: 60vh; overflow-y: auto; background: #1f1f1f; color: #ebebeb;
         border: 1px solid #424242; border-radius: 4px; box-shadow: 0 6px 20px rgba(0,0,0,.5); padding: 3px 0;
         font: 12px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; }
-      .marble-dropdown .item { padding: 5px 10px; white-space: nowrap; cursor: pointer; }
+      .marble-dropdown .item { padding: 4px 10px; white-space: nowrap; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+      .marble-dropdown .thumb { width: 20px; height: 20px; flex: none; border-radius: 2px; background: #333; object-fit: cover; display: block; }
+      .marble-dropdown .thumb.missing { visibility: hidden; }
       .marble-dropdown .item:hover { background: #2c2c2c; }
       .marble-dropdown .item.selected { color: #2cc9ff; }
       .lil-gui .controller:not(.function) .name { display: flex; align-items: center; justify-content: flex-start; gap: 6px; }
