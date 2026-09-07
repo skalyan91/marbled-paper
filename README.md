@@ -81,11 +81,14 @@ exhale. Every drop has its own resting tempo (10–16 breaths a minute), every b
 period and depth, and now and then a drop sighs (twice the depth over one and a half periods).
 The "Breath depth" control sets the peak-to-trough change of radius.
 
-The shader is the whole cost of a frame, so while the sheet moves each frame shades only every
-k-th screen column into a persistent buffer and a trivial pass composites the columns; k is
-chosen so that the frame stays under 31 ms (at least 30 fps) and falls back to 1 whenever the
-sheet is still, a control changes or a PNG is saved, so a still image is always whole. Adjacent
-columns are then up to k − 1 frames apart, and the paint moves well under a pixel per frame.
+The shader is the whole cost of a frame, so while the sheet moves each frame shades only one
+phase of a k-pixel lattice (every second column, or a 2×2, 3×2 or 4×2 cell) into a persistent
+buffer and a trivial pass composites the phases; k is chosen so that the frame stays under
+29 ms (at least 30 fps): 2–3 on a laptop panel, 8–16 on a 5K monitor. It falls back to 1
+whenever the sheet is still, a control changes or a PNG is saved, so a still image is always
+whole. The phases are visited in a dithered order, so neighbouring pixels are of mixed ages
+and a moving edge reads as a little motion blur rather than a comb; the paint moves well under
+a pixel per frame.
 
 The comb differential ("ripple") is expressed in units of the tine spacing and was
 measured on the scans: ≈1.2–1.5 spacings for fine combs, 2–6 for the get-gel passes.
@@ -150,6 +153,12 @@ covering much of the sheet is a thrown colour, a fine one is the sprinkle. Per c
 coverage, spots per cm², median equivalent diameter, Weibull shape and elongation are recorded,
 near-duplicate sheets of the same pattern are merged, and each sheet is attached to a recipe
 by the leading term of its catalogue pattern name.
+
+Whether a sheet was combed across or down is measured too: the global structure tensor of the
+blurred scan gives the dominant streak orientation and its coherence (`streak` on each sheet),
+and each combed recipe declares the orientation it is authored in; on a sheet whose coherent
+streaks run the other way, every comb is turned through 90°. The same pattern name covers
+both (Double comb: dp 75 combed down the sheet, dp 393 across it).
 
 The recipe is then fitted in the page: `window.marble.fitRecipe(name, iters, paletteKey)`
 builds the real recipe, measures every colour exactly with a shader probe over a wide sheet,

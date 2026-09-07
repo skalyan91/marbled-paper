@@ -1,11 +1,14 @@
 #version 300 es
-// Column interleaving: screen column x is taken from texel x / k of phase layer x mod k.
+// Interleaved rendering: screen pixel (x, y) is taken from texel (x / kx, y / ky) of the phase
+// layer that shaded the lattice position (x mod kx, y mod ky).
 precision highp float;
 precision highp sampler2DArray;
 uniform sampler2DArray uPhases;
-uniform int uK;
+uniform ivec2 uK;
+uniform int uPhaseOf[16];
 out vec4 fragColor;
 void main() {
   ivec2 x = ivec2(gl_FragCoord.xy);
-  fragColor = texelFetch(uPhases, ivec3(x.x / uK, x.y, x.x % uK), 0);
+  ivec2 m = x % uK;
+  fragColor = texelFetch(uPhases, ivec3(x / uK, uPhaseOf[m.x + uK.x * m.y]), 0);
 }

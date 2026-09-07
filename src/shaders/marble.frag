@@ -32,7 +32,7 @@ uniform vec4 uDry;        // grain, stretchLimit, groundFill, seed
 uniform vec4 uBleed;      // bleed mm, edge wobble, edge darkening, laid paper
 uniform vec4 uPaperTex;   // laid pitch mm, chain pitch mm, tooth, granulation
 uniform vec4 uSurface;    // wear (rubbed cover fibres), ...
-uniform ivec2 uInterleave; // (k, phase): with k > 1 this pass shades only the screen columns x ≡ phase (mod k), one per texel of a 1/k-width target
+uniform ivec4 uInterleave; // (kx, ky, px, py): this pass shades the screen pixels x ≡ px (mod kx), y ≡ py (mod ky), one per texel of a target 1/kx × 1/ky the screen
 uniform vec4 uLayerStyle[8]; // per drop layer: style bits, style param, ring amplitude (constants of the sprinkle op, looked up at shading time)
 
 layout(std140) uniform Ops { vec4 op[MAX_OPS * 4]; };
@@ -668,7 +668,7 @@ vec3 goldNet(vec2 P, vec3 c, float amp, float lodScr) {
 
 void main() {
   vec2 fc = gl_FragCoord.xy;   // screen pixel centre
-  if (uInterleave.x > 1) fc.x = (fc.x - 0.5) * float(uInterleave.x) + float(uInterleave.y) + 0.5;
+  if (uInterleave.x > 1 || uInterleave.y > 1) fc = (fc - 0.5) * vec2(uInterleave.xy) + vec2(uInterleave.zw) + 0.5;
   vec2 P = (fc - 0.5 * uResolution) / uPxPerMm;
   float mmPerPx = 1.0 / uPxPerMm;
   float soft = uTransfer2.w;

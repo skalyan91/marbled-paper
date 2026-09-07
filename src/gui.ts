@@ -21,7 +21,7 @@ export interface Settings {
   scale: number; // × devicePixelRatio
   neighbourhood: number; // 2 → 5×5, 3 → 7×7
   antialias: boolean;
-  interleave: number; // 0 auto, 1 every column each frame, k > 1: every k-th column per frame while animating
+  interleave: number; // 0 auto, 1 every pixel each frame, k > 1: one phase of a k-pixel lattice per frame while animating
   grain: number;
   stretchLimit: number;
   paperAge: number;
@@ -229,7 +229,7 @@ export function makeGui(s: Settings, onChange: () => void, onRebuild: () => void
   perf.add(s, "scale", 0.25, 1, 0.05).name("Resolution × DPR").onChange(onChange);
   customDropdown(perf.add(s, "neighbourhood", { "5×5 (fast)": 2, "7×7 (exact)": 3 }).name("Drop neighbourhood").onChange(onRebuild) as unknown as Parameters<typeof customDropdown>[0]);
   perf.add(s, "antialias").name("Edge anti-aliasing").onChange(onChange);
-  customDropdown(perf.add(s, "interleave", { "Auto (≥ 30 fps)": 0, "Off": 1, "2 columns": 2, "3 columns": 3, "4 columns": 4 }).name("Interleave columns").onChange(onChange) as unknown as Parameters<typeof customDropdown>[0]);
+  customDropdown(perf.add(s, "interleave", { "Auto (≥ 30 fps)": 0, "Off": 1, "×2": 2, "×3": 3, "×4 (2×2)": 4, "×6 (3×2)": 6, "×8 (4×2)": 8, "×12 (4×3)": 12, "×16 (4×4)": 16 }).name("Interleave").onChange(onChange) as unknown as Parameters<typeof customDropdown>[0]);
   customDropdown(perf.add(s, "debug", DEBUG_MODES).name("View").onChange(onChange) as unknown as Parameters<typeof customDropdown>[0]);
   perf.add(s, "savePng").name("Save PNG");
   perf.close();

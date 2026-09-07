@@ -16,7 +16,9 @@ function fail(msg: string): never {
   throw new Error(msg);
 }
 
-const glMaybe = canvas.getContext("webgl2", { antialias: false, preserveDrawingBuffer: true, powerPreference: "high-performance" });
+// No preserveDrawingBuffer: it would copy the whole frame every frame (59 MB on a 5K monitor).
+// Saving and measuring render whole and read back within the same task, so nothing is lost.
+const glMaybe = canvas.getContext("webgl2", { antialias: false, preserveDrawingBuffer: false, powerPreference: "high-performance" });
 if (!glMaybe) fail("WebGL2 is not available in this browser.");
 const gl: WebGL2RenderingContext = glMaybe;
 
@@ -124,15 +126,29 @@ function buildProgram() {
   errBox.style.display = "none";
 }
 
-// ------------------------------------------------- column interleaving
+// ---------------------------------------------------- interleaved rendering
 // The shader is the whole cost of a frame, so while the sheet moves each frame shades only
-// every k-th screen column into a persistent 1/k-width buffer (one layer per phase) and a
-// trivial pass composites the columns. Adjacent columns are then up to k−1 frames apart; the
-// paint moves well under a pixel per frame, so nothing shows. A still sheet, a parameter
-// change and a saved PNG are always rendered whole. k is chosen automatically (settings
-// .interleave = 0) as the smallest that keeps the frame within FRAME_BUDGET_MS.
-const MAX_INTERLEAVE = 4;
-const FRAME_BUDGET_MS = 31; // ≥ 30 fps
+// one phase of a kx × ky pixel lattice (every kx-th column of every ky-th row) into a
+// persistent buffer with one layer per phase, and a trivial pass composites the phases.
+// The phases are visited in a dithered order, so at any moment the ages of neighbouring
+// pixels are mixed rather than ramped: a moving edge reads as a little motion blur, not as
+// a comb. The paint moves well under a pixel per frame. A still sheet, a control change, a
+// measurement and a saved PNG are always rendered whole at one instant. k is chosen
+// automatically (settings.interleave = 0) as the smallest step that keeps the shading
+// within FRAME_BUDGET_MS; a laptop panel needs 2–3, a 5K monitor 8–16.
+const FRAME_BUDGET_MS = 29; // ≥ 30 fps with a little margin for the composite and the bake
+const LAYOUTS: Record<number, { kx: number; ky: number; order: [number, number][] }> = {
+  1: { kx: 1, ky: 1, order: [[0, 0]] },
+  2: { kx: 2, ky: 1, order: [[0, 0], [1, 0]] },
+  3: { kx: 3, ky: 1, order: [[0, 0], [2, 0], [1, 0]] },
+  4: { kx: 2, ky: 2, order: [[0, 0], [1, 1], [1, 0], [0, 1]] },
+  6: { kx: 3, ky: 2, order: [[0, 0], [2, 1], [1, 0], [0, 1], [2, 0], [1, 1]] },
+  8: { kx: 4, ky: 2, order: [[0, 0], [2, 0], [1, 1], [3, 1], [1, 0], [3, 0], [0, 1], [2, 1]] }, // Bayer 4×2
+  12: { kx: 4, ky: 3, order: [[0, 0], [2, 2], [2, 0], [0, 2], [1, 1], [3, 1], [1, 0], [3, 2], [3, 0], [1, 2], [0, 1], [2, 1]] }, // Bayer 4×4, rows 0–2
+  16: { kx: 4, ky: 4, order: [[0, 0], [2, 2], [2, 0], [0, 2], [1, 1], [3, 3], [3, 1], [1, 3], [1, 0], [3, 2], [3, 0], [1, 2], [0, 1], [2, 3], [2, 1], [0, 3]] }, // Bayer 4×4
+};
+const K_STEPS = [1, 2, 3, 4, 6, 8, 12, 16];
+const MAX_INTERLEAVE = 16;
 const compProgram = (() => {
   const vs = compile(gl.VERTEX_SHADER, vertSrc);
   const fs = compile(gl.FRAGMENT_SHADER, interleaveSrc);
@@ -141,31 +157,32 @@ const compProgram = (() => {
   if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) fail("Link error: " + gl.getProgramInfoLog(pr));
   return pr;
 })();
-const compUni = { phases: gl.getUniformLocation(compProgram, "uPhases"), k: gl.getUniformLocation(compProgram, "uK") };
+const compUni = { phases: gl.getUniformLocation(compProgram, "uPhases"), k: gl.getUniformLocation(compProgram, "uK"), phaseOf: gl.getUniformLocation(compProgram, "uPhaseOf") };
 const phaseFb = gl.createFramebuffer()!;
 let phaseTex: WebGLTexture | null = null;
-let phaseW = 0, phaseH = 0;
+let phaseW = 0, phaseH = 0, phaseLayers = 0;
 let phasesValid = false;   // every layer holds a rendered phase for the current k
 let phaseK = 1;            // interleave factor in use
-let phaseIdx = 0;          // next phase to render
-let needFull = true;       // something other than time changed: render every column this frame
-function ensurePhaseTex() {
-  const w = Math.ceil(canvas.width / 2), h = canvas.height;
-  if (phaseTex && phaseW === w && phaseH === h) return;
+let phaseIdx = 0;          // next phase (index into the layout's order) to render
+let needFull = true;       // something other than time changed: render every pixel this frame
+function ensurePhaseTex(k: number) {
+  const { kx, ky } = LAYOUTS[k];
+  const w = Math.ceil(canvas.width / kx), h = Math.ceil(canvas.height / ky);
+  if (phaseTex && phaseW === w && phaseH === h && phaseLayers === k) return;
   if (phaseTex) gl.deleteTexture(phaseTex);
   phaseTex = gl.createTexture()!;
   gl.activeTexture(gl.TEXTURE3);
   gl.bindTexture(gl.TEXTURE_2D_ARRAY, phaseTex);
-  gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.RGBA8, w, h, MAX_INTERLEAVE);
+  gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.RGBA8, w, h, k);
   gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-  phaseW = w; phaseH = h; phasesValid = false;
+  phaseW = w; phaseH = h; phaseLayers = k; phasesValid = false;
 }
 // GPU time of the main pass, for choosing k: exact from timer queries where the browser has
 // them, else the frame interval (an upper bound when the display's refresh is the limit).
 const timerExt = gl.getExtension("EXT_disjoint_timer_query_webgl2") as { TIME_ELAPSED_EXT: number } | null;
 const pendingQueries: { q: WebGLQuery; k: number }[] = [];
-let fullCostMs = 0;        // smoothed estimate of the cost of shading every column, ms
+let fullCostMs = 0;        // smoothed estimate of the cost of shading every pixel, ms
 let stableFrames = 0;
 function noteCost(msPerPhase: number, k: number) {
   const full = msPerPhase * k;
@@ -181,29 +198,59 @@ function pollQueries() {
     pendingQueries.splice(i, 1);
   }
 }
-/** Draw the main pass: phase `phase` of `k` (k = 1: every column) into whatever is bound. */
-function drawMain(k: number, phase: number, timed = false) {
-  gl.uniform2i(uni.uInterleave, k, phase);
+/** Draw the main pass: phase `p` (index into the layout order) of `k`; k = 1 draws every pixel. */
+function drawMain(k: number, p: number, timed = false) {
+  const { kx, ky, order } = LAYOUTS[k];
+  gl.uniform4i(uni.uInterleave, kx, ky, order[p][0], order[p][1]);
   gl.bindVertexArray(vao);
   const q = timed && timerExt && pendingQueries.length < 8 ? gl.createQuery() : null;
   if (q) gl.beginQuery(timerExt!.TIME_ELAPSED_EXT, q);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
   if (q) { gl.endQuery(timerExt!.TIME_ELAPSED_EXT); pendingQueries.push({ q, k }); }
 }
-/** Render every column straight to the screen (still sheets, measurements, PNGs). */
+/** Render every pixel straight to the screen (still sheets, measurements, PNGs). */
 function drawWhole() {
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   gl.viewport(0, 0, canvas.width, canvas.height);
   drawMain(1, 0);
 }
 function chooseK(dtMs: number) {
-  if (settings.interleave > 0) return Math.min(settings.interleave, MAX_INTERLEAVE);
+  if (settings.interleave > 0) return K_STEPS.includes(settings.interleave) ? settings.interleave : MAX_INTERLEAVE;
   if (!timerExt && phaseK > 0) noteCost(dtMs, phaseK);
   if (fullCostMs <= 0) return phaseK;
-  const want = Math.max(1, Math.min(MAX_INTERLEAVE, Math.ceil(fullCostMs / FRAME_BUDGET_MS)));
+  const want = K_STEPS.find((k) => fullCostMs / k <= FRAME_BUDGET_MS) ?? MAX_INTERLEAVE;
   // hysteresis: only step down once the estimate has held for a while, and not from a noisy first reading
   if (want < phaseK) { if (++stableFrames < 20) return phaseK; stableFrames = 0; } else stableFrames = 0;
   return want;
+}
+/** Render the animated frame: one phase of the lattice (or all of them after a change), then composite. */
+function drawInterleaved(k: number) {
+  const { kx, ky, order } = LAYOUTS[k];
+  ensurePhaseTex(k);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, phaseFb);
+  gl.viewport(0, 0, phaseW, phaseH);
+  const all = needFull || !phasesValid;
+  for (let p = 0; p < k; p++) {
+    if (!all && p !== phaseIdx) continue;
+    gl.framebufferTextureLayer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, phaseTex, 0, p);
+    drawMain(k, p, !all);
+  }
+  phaseIdx = all ? 0 : (phaseIdx + 1) % k;
+  phasesValid = true;
+  // composite: screen pixel (x, y) comes from the layer whose phase is (x mod kx, y mod ky)
+  const phaseOf = new Int32Array(16);
+  order.forEach(([px, py], p) => { phaseOf[px + kx * py] = p; });
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.viewport(0, 0, canvas.width, canvas.height);
+  gl.useProgram(compProgram);
+  gl.activeTexture(gl.TEXTURE3);
+  gl.bindTexture(gl.TEXTURE_2D_ARRAY, phaseTex);
+  gl.uniform1i(compUni.phases, 3);
+  gl.uniform2i(compUni.k, kx, ky);
+  gl.uniform1iv(compUni.phaseOf, phaseOf);
+  gl.bindVertexArray(vao);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  gl.useProgram(program);
 }
 
 // ------------------------------------------------------------ GPU buffers
@@ -355,11 +402,13 @@ function rebuildScene() {
   if (customScene) { uploadScene(customScene.scene, customScene.pal); return; }
   const recipe = RECIPES.find((r) => r.name === settings.pattern) ?? RECIPES[0];
   paletteObj = PALETTES.find((p) => p.short === settings.palette || p.name === settings.palette) ?? PALETTES.find((p) => p.key === recipe.palette) ?? PALETTES[0];
-  const scene = recipe.build(currentParams(), paletteObj);
+  const scene = recipe.build({ ...currentParams(), streaks: recipe.streaks }, paletteObj);
   uploadScene(scene, paletteObj);
-  url.searchParams.set("pattern", settings.pattern);
-  url.searchParams.set("seed", String(settings.seed));
-  history.replaceState(null, "", url.toString());
+  if (url.searchParams.get("pattern") !== settings.pattern || url.searchParams.get("seed") !== String(settings.seed)) {
+    url.searchParams.set("pattern", settings.pattern);
+    url.searchParams.set("seed", String(settings.seed));
+    history.replaceState(null, "", url.toString());   // only on a change: browsers throttle this call
+  }
 }
 
 let lastDpr = window.devicePixelRatio || 1;
@@ -382,6 +431,19 @@ function resize() {
 }
 
 // ----------------------------------------------------------------- loop
+/** Build and upload the scene for the current time, set the frame uniforms and bind the textures. */
+function uploadFrame() {
+  rebuildScene();
+  gl.uniform2f(uni.uResolution, canvas.width, canvas.height);
+  gl.uniform1f(uni.uPxPerMm, canvas.width / sheetWidthMm());
+  gl.uniform1f(uni.uTime, animTime);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D_ARRAY, layers.tex);
+  gl.activeTexture(gl.TEXTURE1);
+  gl.bindTexture(gl.TEXTURE_2D, noiseTex);
+  gl.activeTexture(gl.TEXTURE2);
+  gl.bindTexture(gl.TEXTURE_2D, layers.shiftTex);
+}
 let fpsAcc = 0, fpsN = 0, fpsShown = 0;
 function frame(now: number) {
   const dt = Math.min(0.1, (now - lastFrame) / 1000);
@@ -390,17 +452,8 @@ function frame(now: number) {
   if (settings.animate) { animTime += dt * settings.speed; dirty = true; }
   pollQueries();
   if (dirty) {
-    rebuildScene();
+    uploadFrame();
     dirty = false;
-    gl.uniform2f(uni.uResolution, canvas.width, canvas.height);
-    gl.uniform1f(uni.uPxPerMm, canvas.width / sheetWidthMm());
-    gl.uniform1f(uni.uTime, animTime);
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D_ARRAY, layers.tex);
-    gl.activeTexture(gl.TEXTURE1);
-    gl.bindTexture(gl.TEXTURE_2D, noiseTex);
-    gl.activeTexture(gl.TEXTURE2);
-    gl.bindTexture(gl.TEXTURE_2D, layers.shiftTex);
     const k = settings.animate ? chooseK(dt * 1000) : 1;
     if (k !== phaseK) { phaseK = k; phasesValid = false; }
     if (k === 1) {
@@ -408,30 +461,7 @@ function frame(now: number) {
       gl.viewport(0, 0, canvas.width, canvas.height);
       drawMain(1, 0, true);
       phasesValid = false;
-    } else {
-      ensurePhaseTex();
-      gl.bindFramebuffer(gl.FRAMEBUFFER, phaseFb);
-      gl.viewport(0, 0, Math.ceil(canvas.width / k), canvas.height);
-      const all = needFull || !phasesValid;
-      for (let p = 0; p < k; p++) {
-        if (!all && p !== phaseIdx) continue;
-        gl.framebufferTextureLayer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, phaseTex, 0, p);
-        drawMain(k, p, !all);
-      }
-      phaseIdx = all ? 0 : (phaseIdx + 1) % k;
-      phasesValid = true;
-      // composite the phases into the screen
-      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-      gl.viewport(0, 0, canvas.width, canvas.height);
-      gl.useProgram(compProgram);
-      gl.activeTexture(gl.TEXTURE3);
-      gl.bindTexture(gl.TEXTURE_2D_ARRAY, phaseTex);
-      gl.uniform1i(compUni.phases, 3);
-      gl.uniform1i(compUni.k, k);
-      gl.bindVertexArray(vao);
-      gl.drawArrays(gl.TRIANGLES, 0, 3);
-      gl.useProgram(program);
-    }
+    } else drawInterleaved(k);
     needFull = false;
   }
   fpsAcc += dt; fpsN++;
@@ -442,7 +472,7 @@ function frame(now: number) {
 }
 
 function savePng() {
-  drawWhole();   // every column at one instant, whatever the interleave
+  drawWhole();   // every pixel at one instant, whatever the interleave
   canvas.toBlob((blob) => {
     if (!blob) return;
     const a = document.createElement("a");
@@ -602,6 +632,10 @@ function fitRecipe(name: string, iters = 8, paletteKey?: string) {
   markDirty,
   setPattern: selectPattern,
   get fps() { return fpsShown; },
+  /** Render the current settings whole, synchronously, so the caller can read the canvas back in the same task. */
+  render() { resize(); uploadFrame(); drawWhole(); dirty = false; },
+  /** render cost diagnostics: estimated cost of shading every pixel, and the interleave in use */
+  get perf() { return { fullCostMs: Math.round(fullCostMs), interleave: phaseK, timerQueries: !!timerExt, canvas: `${canvas.width}×${canvas.height}` }; },
   /** Fit spot sizes and background fill of a palette so the rendered stone base matches measured fractions (%). */
   fitPalette(key: string, targets?: Record<string, number>, iters = 6, opts: Record<string, unknown> = {}) {
     const pal = PALETTES.find((p) => p.key === key);
