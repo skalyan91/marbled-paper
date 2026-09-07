@@ -693,11 +693,18 @@ export const RECIPES: Recipe[] = [
   { name: "Zebra", streaks: "v", group: "Sprinkled", palette: "dp61", palettes: ["dp61", "antique19"], terms: ["zebra"], defaults: { ...D19, stretchLimit: 1e5, drift: 0 }, note: "Turkish base; a comb with one set of teeth drawn through twice, down and back up with the second pass halving the first, pulls the colours into long flowing bands (gezogener Achat); then one or more colours sprinkled or splashed on as large drops that sit on the bands (Wolfe and Miura; dp 15, 386).",
     build: (p, pal) => { const b = new Builder(p, pal); const round = roundColours(pal);
       b.still = true;   // the drawn bands never move; only the drops thrown onto them animate
-      b.turkish({ cell: 12, sizeMul: 2.2, densityMul: 0.35, gallDots: false, swirl: 0, exclude: round });
-      b.comb2(-90, 18, { ripple: 1.0, L: 0.5, kernel: "wake" });   // as the Feather's wide comb, on the plain stone base: bands swooping into the periodic tine paths
+      // On dp 15 and 386 the sheet's most abundant pale colour is the large final drops, which the mixture model
+      // labelled the ground; the ground film under the bands is then the darkest colour (black on dp 15), and
+      // the pale colour is held back for the end.
+      const pale = round.length ? undefined : pal.background;
+      const ground = pale === undefined ? undefined : pal.spots.reduce((a, c) => (luma(pal.pigments[c].hex) < luma(pal.pigments[a].hex) ? c : a), pal.spots[0]);
+      b.turkish({ cell: 12, sizeMul: 3, densityMul: 0.4, gallDots: false, swirl: 0, exclude: round, shape: 2.5, ground });
+      b.comb2(-90, 18, { ripple: 2.5, L: 0.5, kernel: "wake" });   // as the Feather's wide comb, on the plain stone base: bands swooping into the periodic tine paths
       b.still = false;
-      for (const c of round) b.sprinkleStats(c, b.statsOf(c), { anim: 0.7 });   // the large final drops
-      if (!round.length && !hasWhiteSpot(pal)) b.sprinkleStats(pal.white, b.statsOf(pal.white, { perCm2: 0.5, d50: 2.4, wk: 0.9 }), { anim: 0.7 });
+      // The large final drops. On dp 15 and 386 they are the sheet's most abundant pale colour, which the mixture
+      // model labelled the ground: it is thrown again last as large even drops that sit on the bands.
+      for (const c of round) b.sprinkleStats(c, b.statsOf(c), { anim: 0.7 });
+      if (pale !== undefined) b.sprinkleStats(pale, { perCm2: 0.05, d50: 18, sig: 0.3, wk: 2.5 }, { anim: 0.7 });   // ~a quarter of the sheet, 12–25 mm (dp 15: 26 %)
       return b.drift().scene(); } },
 
   { name: "Gloster (Partridge eye)", streaks: "v", group: "Dispersant", palette: "gloster19", palettes: ["gloster19", "dp71", "dp91", "dp330", "dp87"], terms: ["gloster", "gloucester", "partridge"], defaults: { ...D19, gall: 1.1 }, note: "Turkish, comb twice, then a turpentine-mixed colour sprinkled: speckled drops with white open spots.",
