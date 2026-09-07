@@ -92,6 +92,32 @@ export function dpNumber(p: Palette | undefined): number | null {
   const m = /\bdp\s*0*(\d+)/i.exec(p.source) ?? /\bdp\s*0*(\d+)/i.exec(p.name) ?? /^dp0*(\d+)$/i.exec(p.key);
   return m ? +m[1] : null;
 }
+/** A small button beside a controller's label (an action that belongs to that control). */
+function inlineButton(ctrl: { $name: HTMLElement }, glyph: string, title: string, onClick: () => void) {
+  const b = document.createElement("button");
+  b.className = "marble-inline";
+  b.textContent = glyph;
+  b.title = title;
+  b.setAttribute("aria-label", title);
+  b.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); onClick(); });
+  ctrl.$name.appendChild(b);
+  return b;
+}
+
+/** A small link beside a controller's label, opening in a new tab (a real anchor, so it is never popup-blocked). */
+function inlineLink(ctrl: { $name: HTMLElement }, glyph: string, title: string) {
+  const a = document.createElement("a");
+  a.className = "marble-inline";
+  a.textContent = glyph;
+  a.title = title;
+  a.setAttribute("aria-label", title);
+  a.target = "_blank";
+  a.rel = "noopener";
+  a.addEventListener("click", (e) => e.stopPropagation());
+  ctrl.$name.appendChild(a);
+  return a;
+}
+
 /** Item page of a sheet in the UW Decorated and Decorative Paper collection. */
 export const sheetUrl = (dp: number) => `https://digitalcollections.lib.washington.edu/digital/collection/dp/id/${dp}`;
 export function bestRecipeFor(lead: string): string | null {
@@ -110,14 +136,19 @@ export function makeGui(s: Settings, onChange: () => void, onRebuild: () => void
   // so the reference is refreshed each time and the sheet link is moved back after the dropdown.
   const palFolder = gui.addFolder("Palette");
   const currentPalette = () => PALETTES.find((p) => p.short === s.palette || p.name === s.palette);
-  const viewSheet = () => { const dp = dpNumber(currentPalette()); if (dp !== null) window.open(sheetUrl(dp), "_blank", "noopener"); };
   const paletteChanged = () => { syncSheetLink(); onChange(); };
   let paletteCtrl = palFolder.add(s, "palette", palettesFor(s.pattern).map((p) => p.short!)).name("Sheet").onChange(paletteChanged);
   customDropdown(paletteCtrl as unknown as Parameters<typeof customDropdown>[0]);
-  const sheetLink = palFolder.add({ viewSheet }, "viewSheet").name("View original sheet ↗");
-  const syncSheetLink = () => { if (dpNumber(currentPalette()) !== null) sheetLink.enable(); else sheetLink.disable(); };
+  const LINK_TITLE = "View the original sheet in the UW catalogue";
+  let sheetLink = inlineLink(paletteCtrl, "↗", LINK_TITLE);
+  const syncSheetLink = () => {
+    const dp = dpNumber(currentPalette());
+    if (dp === null) { sheetLink.removeAttribute("href"); sheetLink.classList.add("disabled"); }
+    else { sheetLink.href = sheetUrl(dp); sheetLink.classList.remove("disabled"); }
+  };
   // main.ts refreshes every controller's display after a programmatic change: keep the link in step
-  sheetLink.updateDisplay = () => { syncSheetLink(); return sheetLink; };
+  const origUpdate = paletteCtrl.updateDisplay.bind(paletteCtrl);
+  paletteCtrl.updateDisplay = () => { origUpdate(); syncSheetLink(); return paletteCtrl; };
   syncSheetLink();
   const refreshPalettes = () => {
     const opts = palettesFor(s.pattern).map((p) => p.short!);
@@ -126,14 +157,14 @@ export function makeGui(s: Settings, onChange: () => void, onRebuild: () => void
     if (next !== paletteCtrl) {
       paletteCtrl = next.name("Sheet").onChange(paletteChanged);
       customDropdown(paletteCtrl as unknown as Parameters<typeof customDropdown>[0]);
-      palFolder.$children.appendChild(sheetLink.domElement);
+      sheetLink = inlineLink(paletteCtrl, "↗", LINK_TITLE);
     }
     syncSheetLink();
   };
   patternCtrl.onChange(() => { refreshPalettes(); onRebuild(); });
-  gui.add(s, "seed", 1, 9999, 1).name("Seed").onChange(onChange).listen();
+  const seedCtrl = gui.add(s, "seed", 1, 9999, 1).name("Seed").onChange(onChange).listen();
+  inlineButton(seedCtrl, "⟳", "Random seed", () => s.randomSeed()).classList.add("big");
   (gui as GUI & { refreshPalettes: () => void }).refreshPalettes = refreshPalettes;
-  gui.add(s, "randomSeed").name("Random seed");
   gui.add(s, "randomAll").name("Randomise everything");
 
   const bath = gui.addFolder("Bath & size");
