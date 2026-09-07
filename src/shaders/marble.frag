@@ -298,14 +298,14 @@ void invSprinkle(inout Trace t, vec4 a, vec4 b, vec4 c, vec4 d4) {
 //   the flanks drawn into hair lines (nonpareil, dp 82; the arches of a wide comb, dp 274).
 //   A cusped bell (exponential) gives pointed tongues and straight-sided zigzags instead.
 // - wake (kernel 1): widely set teeth pulled hard. The wake of a tine has nearly no width: the
-//   drag diverges towards the tine's path as ~L/d (a rod drawn through a viscous fluid) with a
-//   core of half a millimetre, K = (1 + (d/L)²)^-1/2. A line crossing the stroke becomes a
-//   hyperbola asymptotic to the tine's path; drawn across and back with halving, the lines
-//   accumulate along each path into a straight column of near-parallel lines (the quill, ~±6 mm
-//   wide on dp 29, not a band of dragged paint) joined by sigmoids of opposite sense in alternate
-//   gaps, crossing the gap at ~60° midway. The mid-gap angle sets the pull: for 55 mm tines and
-//   L = 0.5 mm, 60° needs a drag of ~340 mm at the tine, six spacings. The nine nearest tines are
-//   summed (the set changes at the mid-gap where the two ends contribute equally).
+//   drag is the Stokes far field of a rod drawn through a viscous fluid, logarithmic in the
+//   distance, K = −½ ln(1 + (d/L)²) with a core L of half a millimetre. Its slope falls as 1/d,
+//   so a line crossing the stroke runs nearly straight across most of the gap and bends only in
+//   the last millimetres into the tine's path, along which the lines accumulate (the quill);
+//   drawn across and back with halving, the sigmoids alternate in sense between gaps and cross
+//   the gap at 65–70° midway (dp 29). A 1/d drag bends the lines into leaf-shaped eyes instead.
+//   The nine nearest tines are summed (the set changes at the mid-gap where the two ends
+//   contribute equally, so the sum is continuous); the mean is removed.
 // The mean drag (c.x) is removed in both.
 void invComb(inout Trace t, vec4 a, vec4 b, vec4 c) {
   vec2 M = vec2(cos(a.y), sin(a.y));
@@ -321,9 +321,9 @@ void invComb(inout Trace t, vec4 a, vec4 b, vec4 c) {
     float kn = floor(n / s + 0.5);
     for (int j = -4; j <= 4; j++) {
       float u = (n - (kn + float(j)) * s) / L;
-      float q = inversesqrt(1.0 + u * u);
-      sum += q;
-      dsum -= u * q * q * q / L;
+      float w = 1.0 + u * u;
+      sum -= 0.5 * log(w);
+      dsum -= u / (w * L);
     }
   }
   t.S -= b.x * (sum - c.x) * M;

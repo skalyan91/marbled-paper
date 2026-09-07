@@ -373,7 +373,7 @@ export class Builder {
     const L = (o.L ?? s * (0.22 + 0.33 * p.viscosity));
     const wake = o.kernel === "wake";
     // train sum as evaluated in the shader, for normalisation: a chain of arcs, or (1 + (d/L)²)^-1/2 per tine over the nine nearest tines
-    const K = (u: number) => 1 / Math.sqrt(1 + u * u);
+    const K = (u: number) => -0.5 * Math.log(1 + u * u);
     const arc = (f: number) => { const g = f - Math.round(f); return Math.sqrt(Math.max(1 - 4 * g * g, 0) + 0.02); };
     const sum = (f: number) => { if (!wake) return arc(f); const k = Math.round(f); let t = 0; for (let j = -4; j <= 4; j++) t += K(((f - k - j) * s) / L); return t; };
     let mean = 0; for (let i = 0; i < 64; i++) mean += sum((i + 0.5) / 64); mean /= 64;
@@ -600,13 +600,14 @@ const featherBase = (b: Builder, exclude: number[], spacing = 55) => {
   // The measured spot sizes are the fragments left after the drawing; the spots thrown were several times
   // larger (as for every combed sheet). No residual swirl: the combs supply all the elongation.
   b.turkish({ cell: 9, sizeMul: 3, densityMul: 0.5, gallDots: false, swirl: 0, exclude });
-  b.comb(-90, 6, { ripple: 8, L: 0.3, kernel: "wake" });   // a 6 mm comb pulled hard: every spot drawn into a continuous band (no tongue ends anywhere on dp 29), 1–5 mm wide
+  b.comb(-90, 6, { ripple: 5, L: 0.3, kernel: "wake" });   // a 6 mm comb pulled hard: every spot drawn into a continuous band (no tongue ends anywhere on dp 29), 1–5 mm wide
   // Wide comb across and back, halving, drawn the length of the bath. The wake has nearly no width: the drag
-  // diverges towards each tine's path, so the lines accumulate along it into a straight column of near-parallel
-  // lines (the quill) and cross the gap at ~60° midway, sigmoids of opposite sense in alternate gaps (dp 29:
-  // quills ~55 mm apart; its orientation histogram peaks at ~75° and ~110°, i.e. ~65–70° from the stroke).
-  // With a 0.5 mm core, 8½ spacings of pull (~470 mm at the tine) gives that.
-  b.comb2(0, spacing, { ripple: 8.5, L: 0.5, kernel: "wake" });
+  // is logarithmic in the distance to each tine's path, so the lines run nearly straight across the gap and
+  // bend only in the last millimetres into the quill, sigmoids of opposite sense in alternate gaps (dp 29:
+  // quills ~55 mm apart; its orientation histogram peaks at ~75° and ~110°, i.e. 65–70° from the stroke).
+  // With a 0.5 mm core, a ripple of 1.5 spacings gives that angle (z ≈ 23 mm: ~57 mm of drag at 1 mm); measured
+  // against the scan's orientation histogram, 1.3 left the crossing ~7° too oblique.
+  b.comb2(0, spacing, { ripple: 1.5, L: 0.5, kernel: "wake" });
   b.still = false;
   return b;
 };
@@ -688,7 +689,7 @@ export const RECIPES: Recipe[] = [
     build: (p, pal) => { const b = new Builder(p, pal); const round = roundColours(pal);
       b.still = true;   // the drawn bands never move; only the drops thrown onto them animate
       b.turkish({ cell: 12, sizeMul: 2.2, densityMul: 0.35, gallDots: false, swirl: 0, exclude: round });
-      b.comb2(-90, 18, { ripple: 5, L: 0.5, kernel: "wake" });   // as the Feather's wide comb, on the plain stone base: bands swooping into the periodic tine paths
+      b.comb2(-90, 18, { ripple: 1.0, L: 0.5, kernel: "wake" });   // as the Feather's wide comb, on the plain stone base: bands swooping into the periodic tine paths
       b.still = false;
       for (const c of round) b.sprinkleStats(c, b.statsOf(c), { anim: 0.7 });   // the large final drops
       if (!round.length && !hasWhiteSpot(pal)) b.sprinkleStats(pal.white, b.statsOf(pal.white, { perCm2: 0.5, d50: 2.4, wk: 0.9 }), { anim: 0.7 });
