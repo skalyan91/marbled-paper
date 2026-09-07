@@ -385,6 +385,19 @@ export class Builder {
     return this;
   }
 
+  /** Irregular sideways displacement of bands drawn along `bandDeg`, as the bath surface drifts between passes:
+   *  two seeded sinusoidal shears across the bands, ~2–5 mm over 25–45 mm and a slower one (dp 284). Exactly
+   *  invertible, unlike a wandering comb path, which folds the map once the drag outruns the wander. */
+  jog(bandDeg: number, amp = 3) {
+    const a = amp * this.p.combStrength;
+    // three incommensurate harmonics so the jog never repeats cleanly: 25–45, 60–120 and a short 12–18 mm one
+    this.shear(bandDeg - 90, a, 25 + 20 * this.rnd(21), this.rnd(22) * Math.PI * 2);
+    this.shear(bandDeg - 90, a * 0.6, 60 + 60 * this.rnd(23), this.rnd(24) * Math.PI * 2);
+    this.shear(bandDeg - 90, a * 0.3, 12 + 6 * this.rnd(25), this.rnd(26) * Math.PI * 2);
+    this.n++;
+    return this;
+  }
+
   /** Two passes: down then back up, second pass offset by half a spacing ("halving"). */
   comb2(dirDeg: number, spacing: number, o: CombOpts = {}) {
     this.comb(dirDeg, spacing, { ...o });
@@ -628,6 +641,7 @@ const zebraBase = (b: Builder, round: number[]) => {
   const ground = pale === undefined ? undefined : pal.spots.reduce((a, c) => (luma(pal.pigments[c].hex) < luma(pal.pigments[a].hex) ? c : a), pal.spots[0]);
   b.turkish({ cell: 16, sizeMul: 6, densityMul: 0.2, gallDots: false, swirl: 0, exclude: round, shape: 2.5, ground });
   b.comb2(-90, 18, { ripple: 1.8, L: 1.5, kernel: "wake" });
+  b.jog(90, 2);
   b.still = false;
   return pale;
 };
@@ -638,6 +652,7 @@ const nonpareilBase = (b: Builder, fine = 2.4) => {
   const coarse = fine / 2.4;
   b.turkish({ cell: 14 * Math.sqrt(coarse), ...COMBED, sizeMul: COMBED.sizeMul * Math.sqrt(coarse), shape: coarse > 1.5 ? 2.5 : undefined });
   b.comb2(0, 22 * Math.sqrt(coarse), { ripple: 2.2 }); // wide comb drawn horizontally twice ("get-gel"): long streaks
+  b.jog(0);   // the bands jog sideways irregularly before the fine comb; the tongues stay regular (dp 284)
   b.comb(-90, fine, { ripple: 1.6 }); // fine comb drawn vertically once: a chain of rounded tongues with cusps between (dp 82)
   return b;
 };
