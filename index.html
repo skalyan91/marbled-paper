@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Marbled paper</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #1a1614; overflow: hidden; }
+      canvas { display: block; width: 100vw; height: 100vh; }
+      #err { position: fixed; left: 0; bottom: 24px; width: min(60vw, 700px); max-height: 40vh; overflow: auto;
+             background: #300; color: #fdd; font: 12px/1.4 ui-monospace, monospace;
+             white-space: pre-wrap; padding: 8px; display: none; z-index: 10; }
+      #hud { position: fixed; left: 8px; bottom: 6px; color: #eee; font: 12px ui-monospace, monospace;
+             text-shadow: 0 0 3px #000; opacity: .75; pointer-events: none; }
+      .lil-gui { --width: 300px; }
+      .lil-gui select, .lil-gui option { font: 12px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; }
+      .marble-dropdown { position: fixed; z-index: 5000; max-height: 60vh; overflow-y: auto; background: #1f1f1f; color: #ebebeb;
+        border: 1px solid #424242; border-radius: 4px; box-shadow: 0 6px 20px rgba(0,0,0,.5); padding: 3px 0;
+        font: 12px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; }
+      .marble-dropdown .item { padding: 5px 10px; white-space: nowrap; cursor: pointer; }
+      .marble-dropdown .item:hover { background: #2c2c2c; }
+      .marble-dropdown .item.selected { color: #2cc9ff; }
+    </style>
+  </head>
+  <body>
+    <canvas id="c"></canvas>
+    <pre id="err"></pre>
+    <div id="hud"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
