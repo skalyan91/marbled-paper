@@ -598,8 +598,9 @@ const featherBase = (b: Builder, exclude: number[], spacing = 55) => {
   b.comb(-90, 6, { ripple: 1.5, L: 2 });        // a 6 mm comb down the sheet breaks the spots into bands 1–5 mm wide (dp 29)
   // Wide comb across and back, halving, drawn the length of the bath: the band ~10 mm wide about each tine
   // travels the whole stroke (the straight quill column), the drag falls off fast beyond it, and midway the
-  // lines cross the gap at ~45°, sigmoids of opposite sense in alternate gaps (dp 29: quills ~55 mm apart).
-  b.comb2(0, spacing, { ripple: 8, L: 5, kernel: "wake" });
+  // lines cross the gap at ~60° from the stroke, sigmoids of opposite sense in alternate gaps (dp 29: quills
+  // ~55 mm apart). The mid-gap angle is set by the wake width: with this kernel and pull, L = 5.7 mm gives 60°.
+  b.comb2(0, spacing, { ripple: 8, L: 5.7, kernel: "wake" });
   return b;
 };
 const nonpareilBase = (b: Builder) => {
