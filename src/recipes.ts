@@ -598,13 +598,13 @@ const roundColours = (pal: Palette) => pal.spots.filter((c) => (pal.pigments[c].
 const featherBase = (b: Builder, exclude: number[], spacing = 55) => {
   b.still = true;   // the drawn base never moves; only what is thrown after it animates
   // The measured spot sizes are the fragments left after the drawing (1–2 mm on dp 29); the spots thrown were
-  // ~4× larger, so that drawn out five- to sixfold by the wide comb they are still bands 1–2 mm wide, dense as
+  // ~2× larger and dense, so that drawn out five- to sixfold by the wide comb they are bands ~1 mm wide, dense as
   // on the scan: anything finer is sheared below the pixel and averages grey, anything larger reads as a
   // flame stitch. No fine comb or get-gel first (either shreds the bands); no residual swirl: the wide comb
   // supplies all the elongation.
   // The fragments' measured Weibull shapes are heavy-tailed; the spots thrown were of one size (shape 2.5), or a
   // few giants would cover the sheet and the coverage could not be fitted.
-  b.turkish({ cell: 12, sizeMul: 4, densityMul: 0.4, gallDots: false, swirl: 0, exclude, shape: 2.5 });
+  b.turkish({ cell: 9, sizeMul: 2.2, densityMul: 0.9, gallDots: false, swirl: 0, exclude, shape: 2.5 });
   // Wide comb across and back, halving, drawn the length of the bath. The wake has nearly no width: the drag
   // is logarithmic in the distance to each tine's path, so the lines run nearly straight across the gap and
   // bend only in the last millimetres into the quill, sigmoids of opposite sense in alternate gaps (dp 29:
