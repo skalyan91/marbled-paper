@@ -1,5 +1,7 @@
 # Marbled paper
 
+Live: <https://marbled-paper.vercel.app> · Source: <https://github.com/skalyan91/marbled-paper>
+
 A WebGL2 demo whose single GLSL ES 3.00 fragment shader renders historically faithful
 European marbled paper, from the 17th-century Turkish stone pattern to the combed, curled,
 dispersant and transfer patterns of the 19th-century trade. The initial conditions animate
