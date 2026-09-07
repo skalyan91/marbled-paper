@@ -608,9 +608,11 @@ const featherBase = (b: Builder, exclude: number[], spacing = 55) => {
   // is logarithmic in the distance to each tine's path, so the lines run nearly straight across the gap and
   // bend only in the last millimetres into the quill, sigmoids of opposite sense in alternate gaps (dp 29:
   // quills ~55 mm apart; its orientation histogram peaks at ~75° and ~110°, i.e. 65–70° from the stroke).
-  // The core caps the strain at z/(2L): 3 mm keeps the lines ~2 mm wide through the quills; with it a ripple of
-  // 0.7 spacings gives the scan's ~70° crossing (measured against its orientation histogram).
-  b.comb2(0, spacing, { ripple: 0.7, L: 3, kernel: "wake" });
+  // The core stays at half a millimetre: the lines must meet the quill in cusps, which a wider core rounds off.
+  // Within a millimetre or two of each quill the bands are sheared fine and average dark, as on the scan; the
+  // line width elsewhere is set by the base and the first comb. A ripple of 1.5 spacings gives the scan's ~70°
+  // crossing (measured against its orientation histogram).
+  b.comb2(0, spacing, { ripple: 1.5, L: 0.5, kernel: "wake" });
   b.still = false;
   return b;
 };
