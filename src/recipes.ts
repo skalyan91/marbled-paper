@@ -698,13 +698,14 @@ export const RECIPES: Recipe[] = [
       // the pale colour is held back for the end.
       const pale = round.length ? undefined : pal.background;
       const ground = pale === undefined ? undefined : pal.spots.reduce((a, c) => (luma(pal.pigments[c].hex) < luma(pal.pigments[a].hex) ? c : a), pal.spots[0]);
-      b.turkish({ cell: 12, sizeMul: 3, densityMul: 0.4, gallDots: false, swirl: 0, exclude: round, shape: 2.5, ground });
-      b.comb2(-90, 18, { ripple: 2.5, L: 0.5, kernel: "wake" });   // as the Feather's wide comb, on the plain stone base: bands swooping into the periodic tine paths
+      // bold bands 3–6 mm wide (dp 15): spots 6× the fragments, of one size, and a 1.5 mm core on the comb
+      b.turkish({ cell: 16, sizeMul: 6, densityMul: 0.2, gallDots: false, swirl: 0, exclude: round, shape: 2.5, ground });
+      b.comb2(-90, 18, { ripple: 1.8, L: 1.5, kernel: "wake" });   // as the Feather's wide comb, on the plain stone base: bands swooping into the periodic tine paths
       b.still = false;
       // The large final drops. On dp 15 and 386 they are the sheet's most abundant pale colour, which the mixture
       // model labelled the ground: it is thrown again last as large even drops that sit on the bands.
       for (const c of round) b.sprinkleStats(c, b.statsOf(c), { anim: 0.7 });
-      if (pale !== undefined) b.sprinkleStats(pale, { perCm2: 0.05, d50: 18, sig: 0.3, wk: 2.5 }, { anim: 0.7 });   // ~a quarter of the sheet, 12–25 mm (dp 15: 26 %)
+      if (pale !== undefined) b.sprinkleStats(pale, { perCm2: 0.05, d50: 19, sig: 0.3, wk: 2.5 }, { anim: 0.7 });   // ~a quarter of the sheet, 12–25 mm (dp 15: 26 %)
       return b.drift().scene(); } },
 
   { name: "Gloster (Partridge eye)", streaks: "v", group: "Dispersant", palette: "gloster19", palettes: ["gloster19", "dp71", "dp91", "dp330", "dp87"], terms: ["gloster", "gloucester", "partridge"], defaults: { ...D19, gall: 1.1 }, note: "Turkish, comb twice, then a turpentine-mixed colour sprinkled: speckled drops with white open spots.",
