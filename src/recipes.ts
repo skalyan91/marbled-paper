@@ -295,7 +295,7 @@ export class Builder {
       radiusSigma: o.sigma ?? 0.22,
       colours,
       fill: o.fill ?? 1,
-      animAmp: (o.anim ?? 1) * 0.16,
+      animAmp: (o.anim ?? 1) * 0.1,
       seed: p.seed * 97 + slot * 13 + 1,
       rMax: o.small ? 0.8 : 1.0,
       shape: o.shape,

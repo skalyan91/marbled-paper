@@ -24,6 +24,7 @@ uniform int uGroundUnder; // ground film colour of the under pattern (-1 none)
 uniform int uProbe;     // debug 8: coverage of this palette colour (-1 = paper), weighted over the footprint pieces
 uniform sampler2DArray uCells;
 uniform sampler2D uNoise;
+uniform sampler2D uRowShift;   // slide of each sprinkle layer, in cells: row 2·slot = per grid row along x, 2·slot+1 = per column along y
 uniform vec4 uPaper;      // rgb, age
 uniform vec4 uTransfer;   // mode, amp, k, angle (rad)
 uniform vec4 uTransfer2;  // phase, wobble, goldNet, softPaper
@@ -128,10 +129,10 @@ const float W0 = 0.9, W1 = 1.5;
 // global time order for every pixel that keeps the loop uniform across a warp.
 // (Within one colour layer the drop order is visually irrelevant: same-colour drops merge.)
 // One candidate cell of a sprinkle layer (see invSprinkle). Windows w0/w1 in cells.
-void candidate(inout Trace t, inout vec2 g, inout mat2 Jg, inout bool stop, ivec2 cc, int slot, float cell, vec4 a, vec4 c, mat2 R, float bw, float w0, float w1) {
+void candidate(inout Trace t, inout vec2 g, inout mat2 Jg, inout bool stop, ivec2 cc, vec2 sh, int slot, float cell, vec4 a, vec4 c, mat2 R, float bw, float w0, float w1) {
   vec4 tx = texelFetch(uCells, ivec3(cc & (TILE - 1), slot), 0);
   if (tx.z <= 0.0) return;
-  vec2 C = vec2(cc) + 0.5 + tx.xy;
+  vec2 C = vec2(cc) + 0.5 + tx.xy + sh;   // the drop's row or column has slid by sh cells
   vec2 q = g - C;
   float d = length(q);
   float r = tx.z;
@@ -225,19 +226,35 @@ void invSprinkle(inout Trace t, vec4 a, vec4 b, vec4 c, vec4 d4) {
   mat2 R = mat2(b.z, -b.w, b.w, b.z);
   vec2 g = (R * (t.S - b.xy)) / cell;   // grid coordinates
   mat2 Jg = (R * t.J) / cell;           // d g / d pixel
-  ivec2 base = ivec2(floor(g));
+  vec2 g0 = g;
+  int baseX = int(floor(g.x)), baseY = int(floor(g.y));
   bool stop = false;
   float bw = max(0.5, uBleed.x * uPxPerMm);   // bleed width on the sheet, in pixels
-  if (d4.x > 0.5) {
-    // small-drop layer (r ≤ 0.8 cell): a 3×3 neighbourhood with a 1-cell window suffices
-    for (int oy = 1; oy >= -1; oy--) for (int ox = 1; ox >= -1; ox--) {
-      if (stop) continue;
-      candidate(t, g, Jg, stop, base + ivec2(ox, oy), slot, cell, a, c, R, bw, 0.6, 1.0);
+  // two crossing streams: the drops of even grid rows slide along x (each row by its own amount),
+  // those of odd rows slide along y (each column by its own amount); the candidate cells are found per stream
+  int N = d4.x > 0.5 ? 1 : NEIGH;   // small-drop layer (r ≤ 0.8 cell): a 3×3 neighbourhood with a 1-cell window suffices
+  float w0 = d4.x > 0.5 ? 0.6 : W0, w1 = d4.x > 0.5 ? 1.0 : W1;
+  for (int oy = NEIGH; oy >= -NEIGH; oy--) {
+    if (oy > N || oy < -N) continue;
+    int cy = baseY + oy;
+    if ((cy & 1) != 0) continue;
+    float sh = texelFetch(uRowShift, ivec2(cy & (TILE - 1), 2 * slot), 0).r;
+    int bx = int(floor(g0.x - sh));
+    for (int ox = NEIGH; ox >= -NEIGH; ox--) {
+      if (stop || ox > N || ox < -N) continue;
+      candidate(t, g, Jg, stop, ivec2(bx + ox, cy), vec2(sh, 0.0), slot, cell, a, c, R, bw, w0, w1);
     }
-  } else {
-    for (int oy = NEIGH; oy >= -NEIGH; oy--) for (int ox = NEIGH; ox >= -NEIGH; ox--) {
-      if (stop) continue;
-      candidate(t, g, Jg, stop, base + ivec2(ox, oy), slot, cell, a, c, R, bw, W0, W1);
+  }
+  for (int ox = NEIGH; ox >= -NEIGH; ox--) {
+    if (ox > N || ox < -N) continue;
+    int cx = baseX + ox;
+    float sh = texelFetch(uRowShift, ivec2(cx & (TILE - 1), 2 * slot + 1), 0).r;
+    int by = int(floor(g0.y - sh));
+    for (int oy = NEIGH; oy >= -NEIGH; oy--) {
+      if (stop || oy > N || oy < -N) continue;
+      int cy = by + oy;
+      if ((cy & 1) == 0) continue;
+      candidate(t, g, Jg, stop, ivec2(cx, cy), vec2(0.0, sh), slot, cell, a, c, R, bw, w0, w1);
     }
   }
   if (!t.done) { t.S = b.xy + transpose(R) * (g * cell); t.J = transpose(R) * Jg * cell; }

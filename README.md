@@ -6,6 +6,7 @@ A WebGL2 demo whose single GLSL ES 3.00 fragment shader renders historically fai
 European marbled paper, from the 17th-century Turkish stone pattern to the combed, curled,
 dispersant and transfer patterns of the 19th-century trade. The initial conditions animate
 slowly, so every frame is a finished sheet; the sheet is shown at life size on the screen.
+The page works on phones as well as desktops: the panel folds into a sheet along the bottom.
 
 Every recipe and every palette is measured, not eyeballed: the colours, their coverage,
 spot-size distributions and shapes come from 440 scans in the University of Washington
@@ -19,6 +20,7 @@ npm run build    # type-check + static build into dist/
 ```
 
 Keys: `space` pause · `n` / `p` next / previous pattern · `r` random seed · `s` save PNG.
+Touch: swipe left / right for the next / previous pattern, tap with two fingers to pause.
 URL parameters: `?pattern=Nonpareil&seed=1234`.
 
 ## What it renders
@@ -60,7 +62,17 @@ Operators (`src/shaders/marble.frag`, authored forward in `src/recipes.ts`):
 Drop layers are sprinkled on jittered grids whose per-cell data (offset, radius, colour) is
 baked into a half-float texture array each frame, so a candidate drop costs one texel fetch.
 Within a layer the drops are visited in a fixed global order; between layers the order is
-exact. The comb differential ("ripple") is expressed in units of the tine spacing and was
+exact.
+
+The animation moves the drops through one another rather than jiggling them in place. Each
+layer carries two crossing streams: the drops of the even grid rows slide along the grid's x
+axis, every row at its own steady speed, and the drops of the odd rows slide along y, every
+column at its own speed. The speed profiles are sums of short-wavelength harmonics (3–11
+cells), so neighbouring drops pass one another continuously, the two streams weave through
+each other, and over any patch of the sheet as much paint moves one way as the other: shear
+everywhere, bulk flow nowhere. Slow bounded swells and a small per-drop wobble are added on
+top. The shader finds a drop by looking in the cell its row or column has slid to, so the
+positions are unbounded and nothing ever returns to where it started. The comb differential ("ripple") is expressed in units of the tine spacing and was
 measured on the scans: ≈1.2–1.5 spacings for fine combs, 2–6 for the get-gel passes.
 
 ### Drying onto the paper

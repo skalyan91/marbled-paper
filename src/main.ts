@@ -101,11 +101,12 @@ function buildProgram() {
   program = pr;
   gl.useProgram(pr);
   uni = {};
-  for (const n of ["uResolution", "uPxPerMm", "uTime", "uOpCount", "uOpCount2", "uUnderMode", "uDebug", "uCells", "uNoise", "uPaper", "uTransfer", "uTransfer2", "uDry", "uSamples", "uBleed", "uPaperTex", "uProbe", "uGroundUnder"]) uni[n] = gl.getUniformLocation(pr, n);
+  for (const n of ["uResolution", "uPxPerMm", "uTime", "uOpCount", "uOpCount2", "uUnderMode", "uDebug", "uCells", "uNoise", "uRowShift", "uPaper", "uTransfer", "uTransfer2", "uDry", "uSamples", "uBleed", "uPaperTex", "uProbe", "uGroundUnder"]) uni[n] = gl.getUniformLocation(pr, n);
   gl.uniformBlockBinding(pr, gl.getUniformBlockIndex(pr, "Ops"), 0);
   gl.uniformBlockBinding(pr, gl.getUniformBlockIndex(pr, "Palette"), 1);
   gl.uniform1i(uni.uCells, 0);
   gl.uniform1i(uni.uNoise, 1);
+  gl.uniform1i(uni.uRowShift, 2);
   errBox.style.display = "none";
 }
 
@@ -208,7 +209,7 @@ function uploadScene(scene: Scene, palette: Palette) {
     underOps = scene.under.ops.map((o) => (o.type === 1 ? { ...o, p: [o.p[0] + offset, ...o.p.slice(1)] } : o));
     allLayers.push(...scene.under.layers);
   }
-  for (let i = 0; i < Math.min(allLayers.length, MAX_LAYERS); i++) layers.bake(i, allLayers[i], animTime, settings.animate);
+  for (let i = 0; i < Math.min(allLayers.length, MAX_LAYERS); i++) layers.bake(i, allLayers[i], animTime);
 
   const top = packOps(scene.ops);
   const und = packOps(underOps);
@@ -293,6 +294,8 @@ function frame(now: number) {
     gl.bindTexture(gl.TEXTURE_2D_ARRAY, layers.tex);
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, noiseTex);
+    gl.activeTexture(gl.TEXTURE2);
+    gl.bindTexture(gl.TEXTURE_2D, layers.shiftTex);
     gl.bindVertexArray(vao);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
@@ -355,6 +358,19 @@ window.addEventListener("keydown", (e) => {
   } else if (e.key === "s") savePng();
   else if (e.key === "r") settings.randomSeed();
 });
+// touch: swipe left/right = next/previous pattern, two-finger tap = pause
+let swipe: { x: number; y: number; id: number } | null = null;
+canvas.addEventListener("pointerdown", (e) => { if (e.pointerType !== "mouse") swipe = { x: e.clientX, y: e.clientY, id: e.pointerId }; });
+canvas.addEventListener("pointerup", (e) => {
+  if (!swipe || e.pointerId !== swipe.id) return;
+  const dx = e.clientX - swipe.x, dy = e.clientY - swipe.y;
+  swipe = null;
+  if (Math.abs(dx) > 60 && Math.abs(dx) > 2 * Math.abs(dy)) {
+    const i = RECIPES.findIndex((r) => r.name === settings.pattern);
+    selectPattern(RECIPES[(i + (dx < 0 ? 1 : RECIPES.length - 1)) % RECIPES.length].name);
+  }
+});
+canvas.addEventListener("touchstart", (e) => { if (e.touches.length === 2) { settings.animate = !settings.animate; gui.controllersRecursive().forEach((c) => c.updateDisplay()); markDirty(); } }, { passive: true });
 requestAnimationFrame(frame);
 
 /** Render the flat-id view once and count pixels per palette colour (paper = index -1). */

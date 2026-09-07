@@ -42,8 +42,8 @@ function customDropdown(ctrl: { $select: HTMLSelectElement; $widget: HTMLElement
   sel.style.pointerEvents = "none";
   sel.tabIndex = -1;
   let list: HTMLDivElement | null = null;
-  const close = () => { list?.remove(); list = null; document.removeEventListener("mousedown", onDoc, true); };
-  const onDoc = (e: MouseEvent) => { if (list && !list.contains(e.target as Node) && !ctrl.$widget.contains(e.target as Node)) close(); };
+  const close = () => { list?.remove(); list = null; document.removeEventListener("pointerdown", onDoc, true); };
+  const onDoc = (e: PointerEvent) => { if (list && !list.contains(e.target as Node) && !ctrl.$widget.contains(e.target as Node)) close(); };
   ctrl.$widget.addEventListener("click", (e) => {
     e.preventDefault();
     if (list) { close(); return; }
@@ -62,9 +62,12 @@ function customDropdown(ctrl: { $select: HTMLSelectElement; $widget: HTMLElement
     const lr = list.getBoundingClientRect();
     if (lr.bottom > innerHeight) list.style.top = `${Math.max(4, r.top - lr.height - 2)}px`;
     if (lr.right > innerWidth) list.style.left = `${Math.max(4, innerWidth - lr.width - 4)}px`;
-    document.addEventListener("mousedown", onDoc, true);
+    document.addEventListener("pointerdown", onDoc, true);
   });
 }
+
+/** Narrow (phone) layout: the panel is a bottom sheet and starts closed. */
+export const isPhone = () => matchMedia("(max-width: 640px)").matches;
 
 /** Sheets for a pattern: the curated ones first, then every generated sheet of the collection whose
  *  leading catalogue pattern matches the recipe's terms (longest-term match wins between recipes). */
@@ -144,5 +147,6 @@ export function makeGui(s: Settings, onChange: () => void, onRebuild: () => void
   customDropdown(perf.add(s, "debug", DEBUG_MODES).name("View").onChange(onChange) as unknown as Parameters<typeof customDropdown>[0]);
   perf.add(s, "savePng").name("Save PNG");
   perf.close();
+  if (isPhone()) { gui.close(); [bath, tools, dry, anim, phys].forEach((f) => f.close()); }
   return gui;
 }

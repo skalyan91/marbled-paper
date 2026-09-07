@@ -1,6 +1,14 @@
 // Per-layer drop data baked into a TEXTURE_2D_ARRAY slice (RGBA16F, TILE×TILE).
 // Static structure (jitter, radius, colour, animation phases) is generated from a
 // seed once; the animated position/radius is re-baked every frame on the CPU.
+//
+// Animation: two crossing streams per layer. The drops of even grid rows slide along the
+// grid's x axis, each row at its own steady speed (a slow shear flow); the drops of odd rows
+// slide along y, each column at its own speed. Neighbouring drops therefore pass one another,
+// the two streams weave through each other, and nothing ever returns to where it was; a small
+// bounded wobble is added on top. The per-row and per-column shifts, in cells, are uploaded
+// as a TILE × (2·MAX_LAYERS) float texture and the shader looks a drop up in the cell its
+// row or column has slid to.
 
 export const TILE = 128;
 export const MAX_LAYERS = 8;
@@ -12,7 +20,8 @@ export interface LayerSpec {
   radiusSigma: number; // log-normal sigma
   colours: number[]; // palette indices; -1 = clear (dispersant only)
   fill: number; // probability a cell has a drop (spatter layers < 1)
-  animAmp: number; // animation amplitude in cells
+  animAmp: number; // wobble amplitude in cells
+  slide?: number; // row-sliding speed multiplier (default 1; 0 = rows stay put)
   seed: number;
   rMax?: number; // radius clamp in cells (0.8 for small-drop layers traced with a 3×3 neighbourhood)
   // placement of the grid in bath mm (needed to compare layers)
@@ -31,6 +40,10 @@ interface LayerStatic {
   col: Float32Array;
   ph: Float32Array; // 3 phases per cell
   w: Float32Array; // 3 angular speeds per cell
+  flow: Float32Array[]; // steady velocity profiles (max |v| = 1): [0] per row along x, [1] per column along y
+  swell: Float32Array[][]; // two bounded profiles (max 1) for rows and for columns
+  swellW: number[][]; // their angular speeds (rad/s)
+  swellPh: number[][]; // and phases
 }
 
 function mulberry32(seed: number) {
@@ -59,8 +72,30 @@ export function buildStatic(spec: LayerSpec): LayerStatic {
     col: new Float32Array(n),
     ph: new Float32Array(n * 3),
     w: new Float32Array(n * 3),
+    flow: [new Float32Array(TILE), new Float32Array(TILE)],
+    swell: [[new Float32Array(TILE), new Float32Array(TILE)], [new Float32Array(TILE), new Float32Array(TILE)]],
+    swellW: [[], []],
+    swellPh: [[], []],
   };
   const rnd = mulberry32(spec.seed * 7919 + 17);
+  // velocity profiles: sums of a few whole-tile harmonics (so they wrap) of short wavelength,
+  // 3–11 cells, normalised to max |·| = 1. Every harmonic has zero mean, so over any patch of the
+  // sheet as much paint moves one way as the other: the motion is shear everywhere, bulk flow nowhere.
+  const profile = (out: Float32Array, modes: number) => {
+    const ms: number[] = [], phs: number[] = [], as: number[] = [];
+    for (let k = 0; k < modes; k++) { ms.push(12 + Math.floor(rnd() * 29)); phs.push(rnd() * Math.PI * 2); as.push(0.5 + rnd()); }
+    let mx = 0;
+    for (let j = 0; j < TILE; j++) {
+      let v = 0;
+      for (let k = 0; k < modes; k++) v += as[k] * Math.sin((2 * Math.PI * ms[k] * j) / TILE + phs[k]);
+      out[j] = v; mx = Math.max(mx, Math.abs(v));
+    }
+    for (let j = 0; j < TILE; j++) out[j] /= mx;
+  };
+  for (let d = 0; d < 2; d++) {
+    profile(s.flow[d], 3);
+    for (let a = 0; a < 2; a++) { profile(s.swell[d][a], 2); s.swellW[d].push(0.025 + rnd() * 0.03); s.swellPh[d].push(rnd() * Math.PI * 2); }
+  }
   const k = Math.max(1, spec.colours.length);
   // Balanced colour assignment: k×k blocks, each row of a block is a random
   // cyclic shift of a per-block random permutation → every colour once per row.
@@ -106,9 +141,11 @@ export function buildStatic(spec: LayerSpec): LayerStatic {
 export class LayerBank {
   gl: WebGL2RenderingContext;
   tex: WebGLTexture;
+  shiftTex: WebGLTexture; // per-row and per-column slide of each layer, in cells (TILE × 2·MAX_LAYERS, R32F)
   statics: (LayerStatic | null)[] = [];
   keys: string[] = [];
   scratch = new Float32Array(TILE * TILE * 4);
+  shift = new Float32Array(TILE * 2);
 
   constructor(gl: WebGL2RenderingContext) {
     this.gl = gl;
@@ -119,6 +156,13 @@ export class LayerBank {
     gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_S, gl.REPEAT);
     gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_T, gl.REPEAT);
+    this.shiftTex = gl.createTexture()!;
+    gl.bindTexture(gl.TEXTURE_2D, this.shiftTex);
+    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.R32F, TILE, 2 * MAX_LAYERS);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
   }
 
   specs: LayerSpec[] = [];
@@ -142,8 +186,9 @@ export class LayerBank {
     return false;
   }
 
-  /** Re-bake slice `slot` for time t (seconds). Static data cached by spec key. */
-  bake(slot: number, spec: LayerSpec, t: number, animate: boolean) {
+  /** Re-bake slice `slot` for time t (seconds). Static data cached by spec key.
+   *  Pausing freezes t, so the sheet holds still rather than snapping back to its rest state. */
+  bake(slot: number, spec: LayerSpec, t: number) {
     // gap filling depends on the earlier spot layers, so they are part of the cache key
     const key = JSON.stringify(spec) + "|" + this.keys.slice(0, slot).map((k) => k ?? "").join("|");
     this.specs[slot] = spec;
@@ -174,7 +219,7 @@ export class LayerBank {
     }
     const s = this.statics[slot]!;
     const d = this.scratch;
-    const amp = animate ? spec.animAmp : 0;
+    const amp = spec.animAmp;
     const n = TILE * TILE;
     for (let i = 0; i < n; i++) {
       const r0 = s.r[i];
@@ -186,11 +231,21 @@ export class LayerBank {
       const p = i * 3;
       d[o] = s.jx[i] + amp * Math.sin(s.w[p] * t + s.ph[p]);
       d[o + 1] = s.jy[i] + amp * Math.sin(s.w[p + 1] * t + s.ph[p + 1]);
-      d[o + 2] = r0 * (1 + (animate ? 0.06 : 0) * Math.sin(s.w[p + 2] * t * 0.7 + s.ph[p + 2]));
+      d[o + 2] = r0 * (1 + 0.06 * Math.sin(s.w[p + 2] * t * 0.7 + s.ph[p + 2]));
       d[o + 3] = s.col[i];
+    }
+    // slide: steady shear flows (≈0.12 cell/s at the fastest row or column) plus two slow bounded swells each
+    const V = 0.12 * (spec.slide ?? 1);
+    const rs = this.shift;
+    for (let dir = 0; dir < 2; dir++) {
+      const sw0 = 0.6 * Math.sin(s.swellW[dir][0] * t + s.swellPh[dir][0]), sw1 = 0.6 * Math.sin(s.swellW[dir][1] * t + s.swellPh[dir][1]);
+      const fl = s.flow[dir], w0 = s.swell[dir][0], w1 = s.swell[dir][1];
+      for (let j = 0; j < TILE; j++) rs[dir * TILE + j] = V * t * fl[j] + (spec.slide ?? 1) * (sw0 * w0[j] + sw1 * w1[j]);
     }
     const gl = this.gl;
     gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.tex);
     gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, slot, TILE, TILE, 1, gl.RGBA, gl.FLOAT, d);
+    gl.bindTexture(gl.TEXTURE_2D, this.shiftTex);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 2 * slot, TILE, 2, gl.RED, gl.FLOAT, rs);
   }
 }
