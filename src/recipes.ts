@@ -238,6 +238,7 @@ export interface Params {
   time: number; // animation seconds
   animate: boolean;
   drift: number; // mm
+  breath: number; // peak-to-trough radius change of a breathing drop, fraction of its radius
   gapFill: number; // 0..1 the marbler aims later colours at gaps
 }
 
@@ -296,6 +297,7 @@ export class Builder {
       colours,
       fill: o.fill ?? 1,
       animAmp: (o.anim ?? 1) * 0.1,
+      breath: p.breath,
       seed: p.seed * 97 + slot * 13 + 1,
       rMax: o.small ? 0.8 : 1.0,
       shape: o.shape,

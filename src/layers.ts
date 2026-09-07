@@ -9,6 +9,15 @@
 // bounded wobble is added on top. The per-row and per-column shifts, in cells, are uploaded
 // as a TILE × (2·MAX_LAYERS) float texture and the shader looks a drop up in the cell its
 // row or column has slid to.
+//
+// Each drop also breathes: its radius follows a human breathing curve rather than a sine
+// (after petasbytes' Breathing Blob, PyCon AU 2026). A breath is a raised-cosine inhale over
+// about a third of the cycle and a raised-cosine exhale over the rest, then a short pause at
+// the end of the exhale. Every drop has its own resting tempo (10–16 breaths a minute) and
+// inhale fraction; every breath draws its own period (bounded, ~12 % spread) and depth
+// (one-sided, 86–100 %); about once every 2½ minutes a drop sighs: twice the depth over one
+// and a half periods, no pause. The per-breath draws are hashed from the cell and the breath
+// index, so the motion is deterministic for a seed and only the current breath is kept as state.
 
 export const TILE = 128;
 export const MAX_LAYERS = 8;
@@ -21,6 +30,7 @@ export interface LayerSpec {
   colours: number[]; // palette indices; -1 = clear (dispersant only)
   fill: number; // probability a cell has a drop (spatter layers < 1)
   animAmp: number; // wobble amplitude in cells
+  breath?: number; // peak-to-trough radius change of a breath, as a fraction of the radius (default 0.12)
   slide?: number; // row-sliding speed multiplier (default 1; 0 = rows stay put)
   seed: number;
   rMax?: number; // radius clamp in cells (0.8 for small-drop layers traced with a 3×3 neighbourhood)
@@ -44,6 +54,38 @@ interface LayerStatic {
   swell: Float32Array[][]; // two bounded profiles (max 1) for rows and for columns
   swellW: number[][]; // their angular speeds (rad/s)
   swellPh: number[][]; // and phases
+  // breathing: per-drop constants, and the state of the breath in progress (see bake)
+  bPeriod: Float32Array; // resting period, s
+  bInh: Float32Array; // inhale fraction of the motion
+  bIdx: Int32Array; // index of the current breath (−1: not started)
+  bStart: Float32Array; // when it started, s
+  bDur: Float32Array; // its whole duration, pause included, s
+  bPause: Float32Array; // its end pause, s
+  bExc: Float32Array; // its depth relative to the nominal excursion (2 for a sigh)
+}
+
+const BREATH_CV = 0.12; // breath-to-breath spread of the period
+const BREATH_DEPTH_VAR = 0.14; // one-sided spread of the depth
+const BREATH_PAUSE = 0.25; // end-of-exhale pause, s (capped at half the period)
+const SIGH_EVERY = 150; // mean seconds between sighs
+
+function hash01(seed: number, i: number) {
+  let x = (seed * 374761393 + i * 668265263) >>> 0;
+  x = Math.imul(x ^ (x >>> 13), 1274126177) >>> 0;
+  return ((x ^ (x >>> 16)) >>> 0) / 4294967296;
+}
+
+/** Draw the period, pause and depth of breath `n` of drop `i` (deterministic in the cell and the index). */
+function drawBreath(s: LayerStatic, seed: number, i: number, n: number) {
+  const P = s.bPeriod[i];
+  const k = (seed ^ Math.imul(i, 2654435761)) >>> 0;
+  const sigh = hash01(k, n * 8 + 3) < P / SIGH_EVERY;
+  if (sigh) { s.bDur[i] = 1.5 * P; s.bPause[i] = 0; s.bExc[i] = 2; return; }
+  // bounded bell-shaped period factor: two uniforms (triangular, sd 0.408) scaled to the CV
+  const f = 1 + (BREATH_CV / 0.408) * (hash01(k, n * 8) + hash01(k, n * 8 + 1) - 1);
+  s.bDur[i] = P * f;
+  s.bPause[i] = Math.min(BREATH_PAUSE, s.bDur[i] / 2);
+  s.bExc[i] = 1 - BREATH_DEPTH_VAR * hash01(k, n * 8 + 2);
 }
 
 function mulberry32(seed: number) {
@@ -76,6 +118,13 @@ export function buildStatic(spec: LayerSpec): LayerStatic {
     swell: [[new Float32Array(TILE), new Float32Array(TILE)], [new Float32Array(TILE), new Float32Array(TILE)]],
     swellW: [[], []],
     swellPh: [[], []],
+    bPeriod: new Float32Array(n),
+    bInh: new Float32Array(n),
+    bIdx: new Int32Array(n).fill(-1),
+    bStart: new Float32Array(n),
+    bDur: new Float32Array(n),
+    bPause: new Float32Array(n),
+    bExc: new Float32Array(n),
   };
   const rnd = mulberry32(spec.seed * 7919 + 17);
   // velocity profiles: sums of a few whole-tile harmonics (so they wrap) of short wavelength,
@@ -133,6 +182,9 @@ export function buildStatic(spec: LayerSpec): LayerStatic {
         s.ph[i * 3 + a] = rnd() * Math.PI * 2;
         s.w[i * 3 + a] = 0.12 + rnd() * 0.25; // rad/s: 20–40 s periods, a slow swim
       }
+      // breathing tempo and inhale fraction of this drop (hashed apart from the rnd stream, so the layouts of old seeds hold)
+      s.bPeriod[i] = 60 / (10 + 6 * hash01(spec.seed, i * 2)); // 10–16 breaths a minute
+      s.bInh[i] = 0.3 + 0.08 * hash01(spec.seed, i * 2 + 1); // inhale : exhale ≈ 1 : 2
     }
   }
   return s;
@@ -220,6 +272,8 @@ export class LayerBank {
     const s = this.statics[slot]!;
     const d = this.scratch;
     const amp = spec.animAmp;
+    const breath = spec.breath ?? 0.12;
+    const rMax = spec.rMax ?? 1.0;
     const n = TILE * TILE;
     for (let i = 0; i < n; i++) {
       const r0 = s.r[i];
@@ -231,7 +285,21 @@ export class LayerBank {
       const p = i * 3;
       d[o] = s.jx[i] + amp * Math.sin(s.w[p] * t + s.ph[p]);
       d[o + 1] = s.jy[i] + amp * Math.sin(s.w[p + 1] * t + s.ph[p + 1]);
-      d[o + 2] = r0 * (1 + 0.06 * Math.sin(s.w[p + 2] * t * 0.7 + s.ph[p + 2]));
+      // breathing: advance to the breath containing t (the first bake, or time running backwards, starts afresh at a random phase)
+      if (s.bIdx[i] < 0 || t < s.bStart[i]) {
+        const idx = Math.floor(t / s.bPeriod[i]);
+        s.bIdx[i] = idx;
+        drawBreath(s, spec.seed, i, idx);
+        s.bStart[i] = t - hash01((spec.seed ^ Math.imul(i, 2654435761)) >>> 0, idx * 8 + 4) * s.bDur[i];
+      }
+      while (t - s.bStart[i] >= s.bDur[i]) { s.bStart[i] += s.bDur[i]; s.bIdx[i]++; drawBreath(s, spec.seed, i, s.bIdx[i]); }
+      // raised-cosine inhale over the fraction f of the motion, raised-cosine exhale over the rest, then the pause
+      const ph = (t - s.bStart[i]) / (s.bDur[i] - s.bPause[i]);
+      const f = s.bInh[i];
+      let w = 0;
+      if (ph < f) w = 0.5 * (1 - Math.cos((Math.PI * ph) / f));
+      else if (ph < 1) w = 0.5 * (1 + Math.cos((Math.PI * (ph - f)) / (1 - f)));
+      d[o + 2] = Math.min(rMax, r0 * (1 + breath * (w * s.bExc[i] - 0.5)));
       d[o + 3] = s.col[i];
     }
     // slide: steady shear flows (≈0.12 cell/s at the fastest row or column) plus two slow bounded swells each

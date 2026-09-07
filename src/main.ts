@@ -1,5 +1,6 @@
 import fragSrc from "./shaders/marble.frag?raw";
 import vertSrc from "./shaders/fullscreen.vert?raw";
+import interleaveSrc from "./shaders/interleave.frag?raw";
 import { MAX_OPS as OPS_PER_CHAIN, FLOATS_PER_OP, packOps } from "./ops";
 import { LayerBank, MAX_LAYERS } from "./layers";
 import { RECIPES, PALETTES, Builder, type Params, type Scene, type Palette } from "./recipes";
@@ -48,11 +49,13 @@ const settings: Settings = {
   zoom: 1.0,
   speed: 1.0,
   drift: 1.2,
+  breath: 0.12,
   gapFill: 0.7,
   animate: true,
   scale: 1.0,
   neighbourhood: 2,
   antialias: true,
+  interleave: 0,
   grain: 0.7,
   stretchLimit: 60.0,
   paperAge: 0.35,
@@ -112,13 +115,95 @@ function buildProgram() {
   program = pr;
   gl.useProgram(pr);
   uni = {};
-  for (const n of ["uResolution", "uPxPerMm", "uTime", "uOpCount", "uOpCount2", "uUnderMode", "uDebug", "uCells", "uNoise", "uRowShift", "uPaper", "uTransfer", "uTransfer2", "uDry", "uSamples", "uBleed", "uPaperTex", "uSurface", "uProbe", "uGroundUnder"]) uni[n] = gl.getUniformLocation(pr, n);
+  for (const n of ["uResolution", "uPxPerMm", "uTime", "uOpCount", "uOpCount2", "uUnderMode", "uDebug", "uCells", "uNoise", "uRowShift", "uPaper", "uTransfer", "uTransfer2", "uDry", "uSamples", "uBleed", "uPaperTex", "uSurface", "uProbe", "uGroundUnder", "uLayerStyle", "uInterleave"]) uni[n] = gl.getUniformLocation(pr, n);
   gl.uniformBlockBinding(pr, gl.getUniformBlockIndex(pr, "Ops"), 0);
   gl.uniformBlockBinding(pr, gl.getUniformBlockIndex(pr, "Palette"), 1);
   gl.uniform1i(uni.uCells, 0);
   gl.uniform1i(uni.uNoise, 1);
   gl.uniform1i(uni.uRowShift, 2);
   errBox.style.display = "none";
+}
+
+// ------------------------------------------------- column interleaving
+// The shader is the whole cost of a frame, so while the sheet moves each frame shades only
+// every k-th screen column into a persistent 1/k-width buffer (one layer per phase) and a
+// trivial pass composites the columns. Adjacent columns are then up to k−1 frames apart; the
+// paint moves well under a pixel per frame, so nothing shows. A still sheet, a parameter
+// change and a saved PNG are always rendered whole. k is chosen automatically (settings
+// .interleave = 0) as the smallest that keeps the frame within FRAME_BUDGET_MS.
+const MAX_INTERLEAVE = 4;
+const FRAME_BUDGET_MS = 31; // ≥ 30 fps
+const compProgram = (() => {
+  const vs = compile(gl.VERTEX_SHADER, vertSrc);
+  const fs = compile(gl.FRAGMENT_SHADER, interleaveSrc);
+  const pr = gl.createProgram()!;
+  gl.attachShader(pr, vs); gl.attachShader(pr, fs); gl.linkProgram(pr);
+  if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) fail("Link error: " + gl.getProgramInfoLog(pr));
+  return pr;
+})();
+const compUni = { phases: gl.getUniformLocation(compProgram, "uPhases"), k: gl.getUniformLocation(compProgram, "uK") };
+const phaseFb = gl.createFramebuffer()!;
+let phaseTex: WebGLTexture | null = null;
+let phaseW = 0, phaseH = 0;
+let phasesValid = false;   // every layer holds a rendered phase for the current k
+let phaseK = 1;            // interleave factor in use
+let phaseIdx = 0;          // next phase to render
+let needFull = true;       // something other than time changed: render every column this frame
+function ensurePhaseTex() {
+  const w = Math.ceil(canvas.width / 2), h = canvas.height;
+  if (phaseTex && phaseW === w && phaseH === h) return;
+  if (phaseTex) gl.deleteTexture(phaseTex);
+  phaseTex = gl.createTexture()!;
+  gl.activeTexture(gl.TEXTURE3);
+  gl.bindTexture(gl.TEXTURE_2D_ARRAY, phaseTex);
+  gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.RGBA8, w, h, MAX_INTERLEAVE);
+  gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  phaseW = w; phaseH = h; phasesValid = false;
+}
+// GPU time of the main pass, for choosing k: exact from timer queries where the browser has
+// them, else the frame interval (an upper bound when the display's refresh is the limit).
+const timerExt = gl.getExtension("EXT_disjoint_timer_query_webgl2") as { TIME_ELAPSED_EXT: number } | null;
+const pendingQueries: { q: WebGLQuery; k: number }[] = [];
+let fullCostMs = 0;        // smoothed estimate of the cost of shading every column, ms
+let stableFrames = 0;
+function noteCost(msPerPhase: number, k: number) {
+  const full = msPerPhase * k;
+  fullCostMs = fullCostMs > 0 ? fullCostMs + 0.15 * (full - fullCostMs) : full;
+}
+function pollQueries() {
+  if (!timerExt) return;
+  for (let i = pendingQueries.length - 1; i >= 0; i--) {
+    const { q, k } = pendingQueries[i];
+    if (!gl.getQueryParameter(q, gl.QUERY_RESULT_AVAILABLE)) continue;
+    if (!gl.getParameter(0x8FBB /* GPU_DISJOINT_EXT */)) noteCost((gl.getQueryParameter(q, gl.QUERY_RESULT) as number) / 1e6, k);
+    gl.deleteQuery(q);
+    pendingQueries.splice(i, 1);
+  }
+}
+/** Draw the main pass: phase `phase` of `k` (k = 1: every column) into whatever is bound. */
+function drawMain(k: number, phase: number, timed = false) {
+  gl.uniform2i(uni.uInterleave, k, phase);
+  gl.bindVertexArray(vao);
+  const q = timed && timerExt && pendingQueries.length < 8 ? gl.createQuery() : null;
+  if (q) gl.beginQuery(timerExt!.TIME_ELAPSED_EXT, q);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  if (q) { gl.endQuery(timerExt!.TIME_ELAPSED_EXT); pendingQueries.push({ q, k }); }
+}
+/** Render every column straight to the screen (still sheets, measurements, PNGs). */
+function drawWhole() {
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.viewport(0, 0, canvas.width, canvas.height);
+  drawMain(1, 0);
+}
+function chooseK(dtMs: number) {
+  if (settings.interleave > 0) return Math.min(settings.interleave, MAX_INTERLEAVE);
+  if (!timerExt && phaseK > 0) noteCost(dtMs, phaseK);
+  if (fullCostMs <= 0) return phaseK;
+  const want = Math.max(1, Math.min(MAX_INTERLEAVE, Math.ceil(fullCostMs / FRAME_BUDGET_MS)));
+  // hysteresis: only step down once the estimate has held for a while, and not from a noisy first reading
+  if (want < phaseK) { if (++stableFrames < 20) return phaseK; stableFrames = 0; } else stableFrames = 0;
+  return want;
 }
 
 // ------------------------------------------------------------ GPU buffers
@@ -184,7 +269,7 @@ let lastFrame = performance.now();
 let paletteObj: Palette = PALETTES[0];
 const opData = new Float32Array(TOTAL_OPS * FLOATS_PER_OP);
 
-function markDirty() { dirty = true; }
+function markDirty() { dirty = true; needFull = true; }
 
 function hexToRgb(hex: string): [number, number, number] {
   const n = parseInt(hex.slice(1), 16);
@@ -206,6 +291,7 @@ function currentParams(): Params {
     time: animTime,
     animate: settings.animate,
     drift: settings.drift,
+    breath: settings.breath,
     gapFill: settings.gapFill,
   };
 }
@@ -221,6 +307,13 @@ function uploadScene(scene: Scene, palette: Palette) {
     allLayers.push(...scene.under.layers);
   }
   for (let i = 0; i < Math.min(allLayers.length, MAX_LAYERS); i++) layers.bake(i, allLayers[i], animTime);
+  // per-layer shading constants (style bits, style parameter, ring amplitude), read by the shader per slot
+  const layerStyle = new Float32Array(MAX_LAYERS * 4);
+  for (const o of [...scene.ops, ...underOps]) {
+    if (o.type !== 1 || o.p[0] >= MAX_LAYERS) continue;
+    layerStyle.set([o.p[2], o.p[9] ?? 1, o.p[10] ?? 0, 0], o.p[0] * 4);
+  }
+  gl.uniform4fv(uni.uLayerStyle, layerStyle);
 
   const top = packOps(scene.ops);
   const und = packOps(underOps);
@@ -295,10 +388,10 @@ function frame(now: number) {
   lastFrame = now;
   resize();
   if (settings.animate) { animTime += dt * settings.speed; dirty = true; }
+  pollQueries();
   if (dirty) {
     rebuildScene();
     dirty = false;
-    gl.viewport(0, 0, canvas.width, canvas.height);
     gl.uniform2f(uni.uResolution, canvas.width, canvas.height);
     gl.uniform1f(uni.uPxPerMm, canvas.width / sheetWidthMm());
     gl.uniform1f(uni.uTime, animTime);
@@ -308,16 +401,48 @@ function frame(now: number) {
     gl.bindTexture(gl.TEXTURE_2D, noiseTex);
     gl.activeTexture(gl.TEXTURE2);
     gl.bindTexture(gl.TEXTURE_2D, layers.shiftTex);
-    gl.bindVertexArray(vao);
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    const k = settings.animate ? chooseK(dt * 1000) : 1;
+    if (k !== phaseK) { phaseK = k; phasesValid = false; }
+    if (k === 1) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.viewport(0, 0, canvas.width, canvas.height);
+      drawMain(1, 0, true);
+      phasesValid = false;
+    } else {
+      ensurePhaseTex();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, phaseFb);
+      gl.viewport(0, 0, Math.ceil(canvas.width / k), canvas.height);
+      const all = needFull || !phasesValid;
+      for (let p = 0; p < k; p++) {
+        if (!all && p !== phaseIdx) continue;
+        gl.framebufferTextureLayer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, phaseTex, 0, p);
+        drawMain(k, p, !all);
+      }
+      phaseIdx = all ? 0 : (phaseIdx + 1) % k;
+      phasesValid = true;
+      // composite the phases into the screen
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.viewport(0, 0, canvas.width, canvas.height);
+      gl.useProgram(compProgram);
+      gl.activeTexture(gl.TEXTURE3);
+      gl.bindTexture(gl.TEXTURE_2D_ARRAY, phaseTex);
+      gl.uniform1i(compUni.phases, 3);
+      gl.uniform1i(compUni.k, k);
+      gl.bindVertexArray(vao);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      gl.useProgram(program);
+    }
+    needFull = false;
   }
   fpsAcc += dt; fpsN++;
   if (fpsAcc > 0.5) { fpsShown = fpsN / fpsAcc; fpsAcc = 0; fpsN = 0; }
-  hud.textContent = `${canvas.width}×${canvas.height} @ DPR ${(window.devicePixelRatio || 1).toFixed(2)} · ${settings.ppi} ppi · sheet ${sheetWidthMm().toFixed(0)} mm across · zoom ${settings.zoom} · ${fpsShown.toFixed(0)} fps · ${settings.pattern} · seed ${settings.seed}`;
+  const il = settings.animate && phaseK > 1 ? ` · interleave ×${phaseK}` : "";
+  hud.textContent = `${canvas.width}×${canvas.height} @ DPR ${(window.devicePixelRatio || 1).toFixed(2)} · ${settings.ppi} ppi · sheet ${sheetWidthMm().toFixed(0)} mm across · zoom ${settings.zoom} · ${fpsShown.toFixed(0)} fps${il} · ${settings.pattern} · seed ${settings.seed}`;
   requestAnimationFrame(frame);
 }
 
 function savePng() {
+  drawWhole();   // every column at one instant, whatever the interleave
   canvas.toBlob((blob) => {
     if (!blob) return;
     const a = document.createElement("a");
@@ -329,7 +454,7 @@ function savePng() {
 }
 
 // ----------------------------------------------------------------- init
-const BASE_DEFAULTS = { viscosity: 0.35, gall: 1, density: 1, combScale: 1, combStrength: 1, curlStrength: 1, transferAmp: 1, paperAge: 0.35, bleed: 0.12, edgeDark: 0.12, grain: 0.7, tooth: 0.6, granulation: 0.6, wear: 0.35, drift: 1.2, stretchLimit: 60, gapFill: 0.7 };
+const BASE_DEFAULTS = { viscosity: 0.35, gall: 1, density: 1, combScale: 1, combStrength: 1, curlStrength: 1, transferAmp: 1, paperAge: 0.35, bleed: 0.12, edgeDark: 0.12, grain: 0.7, tooth: 0.6, granulation: 0.6, wear: 0.35, drift: 1.2, breath: 0.12, stretchLimit: 60, gapFill: 0.7 };
 function applyDefaults(name: string) {
   const r = RECIPES.find((x) => x.name === name);
   if (!r) return;
@@ -392,9 +517,7 @@ function measureCoverage(noRebuild = false): Record<string, number> {
   settings.debug = "flat ids";
   if (!noRebuild) rebuildScene();
   else gl.uniform1i(uni.uDebug, DEBUG_MODES.indexOf(settings.debug));
-  gl.viewport(0, 0, canvas.width, canvas.height);
-  gl.bindVertexArray(vao);
-  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  drawWhole();
   const w = Math.min(canvas.width, 1024), hh = Math.min(canvas.height, 1024);
   const px = new Uint8Array(w * hh * 4);
   gl.readPixels(0, 0, w, hh, gl.RGBA, gl.UNSIGNED_BYTE, px);
@@ -421,9 +544,7 @@ function measureExact(pal: Palette): Record<string, number> {
   const probes: [number, string][] = [[-1, "paper"], ...pal.pigments.map((pg, i) => [i, pg.name] as [number, string])];
   for (const [id, name] of probes) {
     gl.uniform1i(uni.uProbe, id);
-    gl.viewport(0, 0, canvas.width, canvas.height);
-    gl.bindVertexArray(vao);
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    drawWhole();
     gl.readPixels(0, 0, w, hh, gl.RGBA, gl.UNSIGNED_BYTE, px);
     let sum = 0;
     for (let i = 0; i < w * hh; i++) sum += px[i * 4];
@@ -532,6 +653,7 @@ function fitRecipe(name: string, iters = 8, paletteKey?: string) {
   PALETTES,
   showScene(scene: Scene | null, pal: Palette) { customScene = scene ? { scene, pal } : null; paletteObj = pal; markDirty(); },
   params: currentParams,
+  layers,
   /** Upload an arbitrary scene (built with marble.Builder) and measure its coverage. */
   measureScene(scene: Scene, pal: Palette) {
     paletteObj = pal;

@@ -72,7 +72,22 @@ cells), so neighbouring drops pass one another continuously, the two streams wea
 each other, and over any patch of the sheet as much paint moves one way as the other: shear
 everywhere, bulk flow nowhere. Slow bounded swells and a small per-drop wobble are added on
 top. The shader finds a drop by looking in the cell its row or column has slid to, so the
-positions are unbounded and nothing ever returns to where it started. The comb differential ("ripple") is expressed in units of the tine spacing and was
+positions are unbounded and nothing ever returns to where it started.
+
+Each drop also breathes: its radius follows a human breathing curve (after petasbytes'
+*Breathing Blob*, PyCon AU 2026) rather than a sine: a raised-cosine inhale over about a third
+of the cycle, a raised-cosine exhale over the rest, and a short pause at the end of the
+exhale. Every drop has its own resting tempo (10–16 breaths a minute), every breath its own
+period and depth, and now and then a drop sighs (twice the depth over one and a half periods).
+The "Breath depth" control sets the peak-to-trough change of radius.
+
+The shader is the whole cost of a frame, so while the sheet moves each frame shades only every
+k-th screen column into a persistent buffer and a trivial pass composites the columns; k is
+chosen so that the frame stays under 31 ms (at least 30 fps) and falls back to 1 whenever the
+sheet is still, a control changes or a PNG is saved, so a still image is always whole. Adjacent
+columns are then up to k − 1 frames apart, and the paint moves well under a pixel per frame.
+
+The comb differential ("ripple") is expressed in units of the tine spacing and was
 measured on the scans: ≈1.2–1.5 spacings for fine combs, 2–6 for the get-gel passes.
 
 ### Drying onto the paper

@@ -32,6 +32,8 @@ uniform vec4 uDry;        // grain, stretchLimit, groundFill, seed
 uniform vec4 uBleed;      // bleed mm, edge wobble, edge darkening, laid paper
 uniform vec4 uPaperTex;   // laid pitch mm, chain pitch mm, tooth, granulation
 uniform vec4 uSurface;    // wear (rubbed cover fibres), ...
+uniform ivec2 uInterleave; // (k, phase): with k > 1 this pass shades only the screen columns x ≡ phase (mod k), one per texel of a 1/k-width target
+uniform vec4 uLayerStyle[8]; // per drop layer: style bits, style param, ring amplitude (constants of the sprinkle op, looked up at shading time)
 
 layout(std140) uniform Ops { vec4 op[MAX_OPS * 4]; };
 layout(std140) uniform Palette { vec4 col[16]; vec4 pig[16]; };
@@ -65,24 +67,23 @@ vec2 worley(vec2 p, int seed) {
 }
 
 // ------------------------------------------------------------ hit record
+// Kept small on purpose: MAXH of these live in the trace state, dynamically indexed, so every
+// float here costs registers (or spills) for the whole shader. Per-layer constants (style,
+// param, ring) are looked up from uLayerStyle at shading time instead of being carried.
 struct Hit {
   bool hit;
   int layer;
   ivec2 cell;
   vec2 u;       // local coords inside drop, |u|<1
   int color;    // palette index, -1 clear
-  int style;
-  float param;
-  float ring;
   vec2 S;       // bath coordinate (mm) at the moment of the hit
-  float edge;   // distance inside the drop outline, mm (in the hit frame)
-  float ePx;    // the same distance in screen pixels
+  float ePx;    // distance inside the drop outline, screen pixels
   mat2 J;       // d S / d pixel at the hit (mm per px)
 };
 
 Hit noHit(vec2 P) {
   Hit h;
-  h.hit = false; h.layer = -1; h.cell = ivec2(0); h.u = vec2(0); h.color = -1; h.style = 0; h.param = 0.0; h.ring = 0.0; h.S = P; h.edge = 0.0; h.ePx = 0.0; h.J = mat2(1.0);
+  h.hit = false; h.layer = -1; h.cell = ivec2(0); h.u = vec2(0); h.color = -1; h.S = P; h.ePx = 0.0; h.J = mat2(1.0);
   return h;
 }
 
@@ -90,7 +91,11 @@ Hit noHit(vec2 P) {
 // together with the uncovered remainder). In a wide footprint (stretched film) the pieces are
 // claimed analytically along the stretch axis v: each drop takes the exact sub-interval of the
 // footprint that lies inside its outline, and the trace point moves into what is left.
-#define MAXH 8
+// MAXH sets the size of the dynamically indexed arrays below and so the register footprint of
+// the whole shader: 8 → 4 was ~30 % faster on Apple GPUs with no visible change (0.05 % of the
+// pixels of a Nonpareil sheet moved by more than 8/255); 2 is visibly different. Keep ≥ 3: the
+// "weights" debug view reads slot 2.
+#define MAXH 4
 struct Trace {
   vec2 S;
   mat2 J;
@@ -196,7 +201,7 @@ void candidate(inout Trace t, inout vec2 g, inout mat2 Jg, inout bool stop, ivec
   if (claimed) {
     Hit h;
     h.hit = true; h.layer = slot; h.cell = cc; h.u = q / r; h.color = int(floor(tx.a + 0.5));
-    h.style = int(a.w + 0.5); h.param = c.z; h.ring = c.w; h.S = t.S; h.edge = (r - d) * cell; h.ePx = ePx;
+    h.S = t.S; h.ePx = ePx;
     h.J = transpose(R) * Jg * cell;
     // In interval mode a drawn-out film crosses the footprint many times; chords of the same
     // colour in the same layer are one piece (their paints have mingled below the pixel), so
@@ -469,11 +474,12 @@ float styleCoverage(Hit h, inout vec3 colr, float lodMat, float sig) {
   float cov = 1.0;
   float fade = clamp(4.0 / sig, 0.0, 1.0);   // drop-frame textures vanish once the film is stretched
   float ul = length(h.u);
-  int st = h.style;
-  float p = h.param;
+  vec4 ls = uLayerStyle[h.layer];
+  int st = int(ls.x + 0.5);
+  float p = ls.y, ring = ls.z;
   vec4 hr = hash4(h.cell, h.layer + 71);
-  if ((st & 64) != 0 || h.ring > 0.0) { // RINGED: faint concentric pulses
-    float amp = max(h.ring, 0.05) * 0.6 * fade;
+  if ((st & 64) != 0 || ring > 0.0) { // RINGED: faint concentric pulses
+    float amp = max(ring, 0.05) * 0.6 * fade;
     float wobble = 0.35 * (tnoise(h.u * 0.6 + hr.zw, 0.0).g - 0.5);
     colr *= 1.0 + amp * sin(ul * (9.0 + 4.0 * hr.x) + hr.y * 6.28 + wobble * 6.0) * (0.3 + 0.7 * ul);
   }
@@ -661,7 +667,9 @@ vec3 goldNet(vec2 P, vec3 c, float amp, float lodScr) {
 }
 
 void main() {
-  vec2 P = (gl_FragCoord.xy - 0.5 * uResolution) / uPxPerMm;
+  vec2 fc = gl_FragCoord.xy;   // screen pixel centre
+  if (uInterleave.x > 1) fc.x = (fc.x - 0.5) * float(uInterleave.x) + float(uInterleave.y) + 0.5;
+  vec2 P = (fc - 0.5 * uResolution) / uPxPerMm;
   float mmPerPx = 1.0 / uPxPerMm;
   float soft = uTransfer2.w;
   float lodScr = log2(mmPerPx);
@@ -724,7 +732,7 @@ void main() {
   if (uTransfer2.z > 0.0) c = goldNet(P, c, uTransfer2.z, lodScr);
 
   // gentle vignette / sheet edge shading
-  vec2 v = gl_FragCoord.xy / uResolution;
+  vec2 v = fc / uResolution;
   c *= 1.0 - 0.10 * pow(length(v - 0.5) * 1.3, 3.0);
   fragColor = vec4(c, 1.0);
 }

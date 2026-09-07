@@ -15,11 +15,13 @@ export interface Settings {
   zoom: number; // 1 = life size
   speed: number;
   drift: number;
+  breath: number; // peak-to-trough radius change of a breathing drop, as a fraction of its radius
   gapFill: number;
   animate: boolean;
   scale: number; // × devicePixelRatio
   neighbourhood: number; // 2 → 5×5, 3 → 7×7
   antialias: boolean;
+  interleave: number; // 0 auto, 1 every column each frame, k > 1: every k-th column per frame while animating
   grain: number;
   stretchLimit: number;
   paperAge: number;
@@ -217,6 +219,7 @@ export function makeGui(s: Settings, onChange: () => void, onRebuild: () => void
   anim.add(s, "animate").name("Animate").onChange(onChange);
   anim.add(s, "speed", 0, 3, 0.01).name("Speed").onChange(onChange);
   anim.add(s, "drift", 0, 4, 0.01).name("Drift (mm)").onChange(onChange);
+  anim.add(s, "breath", 0, 0.4, 0.01).name("Breath depth").onChange(onChange);
 
   const phys = gui.addFolder("Physical scale");
   phys.add(s, "ppi", 72, 300, 1).name("Screen pixels / inch").onChange(() => { (s as Settings & { ppiTouched?: boolean }).ppiTouched = true; onChange(); });
@@ -226,6 +229,7 @@ export function makeGui(s: Settings, onChange: () => void, onRebuild: () => void
   perf.add(s, "scale", 0.25, 1, 0.05).name("Resolution × DPR").onChange(onChange);
   customDropdown(perf.add(s, "neighbourhood", { "5×5 (fast)": 2, "7×7 (exact)": 3 }).name("Drop neighbourhood").onChange(onRebuild) as unknown as Parameters<typeof customDropdown>[0]);
   perf.add(s, "antialias").name("Edge anti-aliasing").onChange(onChange);
+  customDropdown(perf.add(s, "interleave", { "Auto (≥ 30 fps)": 0, "Off": 1, "2 columns": 2, "3 columns": 3, "4 columns": 4 }).name("Interleave columns").onChange(onChange) as unknown as Parameters<typeof customDropdown>[0]);
   customDropdown(perf.add(s, "debug", DEBUG_MODES).name("View").onChange(onChange) as unknown as Parameters<typeof customDropdown>[0]);
   perf.add(s, "savePng").name("Save PNG");
   perf.close();
