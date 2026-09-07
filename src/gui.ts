@@ -92,7 +92,7 @@ export function dpNumber(p: Palette | undefined): number | null {
   const m = /\bdp\s*0*(\d+)/i.exec(p.source) ?? /\bdp\s*0*(\d+)/i.exec(p.name) ?? /^dp0*(\d+)$/i.exec(p.key);
   return m ? +m[1] : null;
 }
-/** A small button beside a controller's label (an action that belongs to that control). */
+/** A small button at the start of a controller's row, before its label (an action that belongs to that control). */
 function inlineButton(ctrl: { $name: HTMLElement }, glyph: string, title: string, onClick: () => void) {
   const b = document.createElement("button");
   b.className = "marble-inline";
@@ -100,11 +100,11 @@ function inlineButton(ctrl: { $name: HTMLElement }, glyph: string, title: string
   b.title = title;
   b.setAttribute("aria-label", title);
   b.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); onClick(); });
-  ctrl.$name.appendChild(b);
+  ctrl.$name.prepend(b);   // at the start of the row, so the buttons of different rows line up
   return b;
 }
 
-/** A small link beside a controller's label, opening in a new tab (a real anchor, so it is never popup-blocked). */
+/** A small link at the start of a controller's row, opening in a new tab (a real anchor, so it is never popup-blocked). */
 function inlineLink(ctrl: { $name: HTMLElement }, glyph: string, title: string) {
   const a = document.createElement("a");
   a.className = "marble-inline";
@@ -114,7 +114,7 @@ function inlineLink(ctrl: { $name: HTMLElement }, glyph: string, title: string) 
   a.target = "_blank";
   a.rel = "noopener";
   a.addEventListener("click", (e) => e.stopPropagation());
-  ctrl.$name.appendChild(a);
+  ctrl.$name.prepend(a);
   return a;
 }
 
