@@ -319,7 +319,15 @@ void invComb(inout Trace t, vec4 a, vec4 b, vec4 c, vec4 d) {
   // wave shape: sinusoid, or (d.x > 0) a triangle wave of the same amplitude and period (Peacock: the two rows of
   // straight zigzag lines cross into diamonds)
   float wv, dwv;
-  if (d.x > 0.5) { wv = 0.63661977 * asin(clamp(sin(phw), -1.0, 1.0)); dwv = 0.63661977 * sign(cos(phw)); }
+  if (d.x > 0.5) {
+    // a triangle with slightly rounded vertices (asin(k·sin)/asin(k), k = 0.97): the sides are straight to within 3 %,
+    // and the slope, hence the direction of drag, turns continuously at each vertex; a sharp vertex flipped the drag
+    // direction on a line across the sheet and cut the pattern there (user: "horizontal discontinuities")
+    float kk = 0.97, nrm = 1.0 / asin(kk);
+    float sn = sin(phw), cs = cos(phw);
+    wv = nrm * asin(kk * sn);
+    dwv = nrm * kk * cs * inversesqrt(max(1.0 - kk * kk * sn * sn, 1e-4));
+  }
   else { wv = sin(phw); dwv = cos(phw); }
   float n = dot(t.S, N) - a.w - b.w * wv;
   float slope = b.w * c.y * dwv;               // d(tine offset)/d(stroke coordinate)
@@ -393,14 +401,24 @@ void invVortexAt(inout vec2 S, inout mat2 J, vec2 C, float z, float L, float r, 
   float d = length(q);
   float ang, dang;
   if (r < 0.0) {
-    // a stylus twirl of constant pitch (every curl measured, dp 16/20/21/23/96–98/102/156/272): the rotation is z radians
-    // inside the core radius (a rigidly turned disc) and ramps linearly to nothing at R = -r, where the stylus began;
-    // the paint between is wound into a spiral of even pitch, the paint outside R is untouched
+    // A stylus twirl in a viscous film. Inside the stylus path (radius R = -r) the record is kinematic: z radians of
+    // rotation in the core (a rigidly turned disc of radius `core`) ramping evenly out to the path, the even pitch every
+    // measured curl shows (dp 16/20/21/23/96–98/102/156/272). Outside the path the film is dragged round by viscosity
+    // alone: a rotating disc in a Stokes film turns the fluid outside as (R/d)² (the 2-D rotlet), and the drag against
+    // the bath floor damps it over the length L, which grows with the size's viscosity. A thin size leaves the
+    // surroundings nearly still; a thick one carries the twist well beyond the path.
     float R = -r, wdt = max(R - core, 1e-3);
-    float t = clamp((R - d) / wdt, 0.0, 1.0);
-    float sm = t * t * (3.0 - 2.0 * t);
-    ang = -sgn * w * z * sm;
-    dang = sgn * w * z * 6.0 * t * (1.0 - t) / wdt;
+    if (d <= R) {
+      float t = clamp((R - d) / wdt, 0.0, 1.0);
+      float sm = t * t * (3.0 - 2.0 * t);
+      ang = -sgn * w * z * sm;
+      dang = sgn * w * z * 6.0 * t * (1.0 - t) / wdt;
+    } else {
+      float q = R / d, ex = exp(-(d - R) / max(L, 1e-3));
+      float tail = q * q * ex;
+      ang = -sgn * w * z * 0.35 * tail;                       // the film at the path turns with the stylus only in part: it slips
+      dang = -sgn * w * z * 0.35 * tail * (-2.0 / d - 1.0 / max(L, 1e-3));
+    }
   } else {
     float dm = max(d, core);
     float ex = exp(-max(0.0, d - r) / L);
@@ -433,7 +451,8 @@ void invVortexGrid(inout Trace t, vec4 a, vec4 b, vec4 c, vec4 d) {
     float sgn = b.w > 0.5 ? (((cc.x + cc.y) & 1) == 0 ? 1.0 : -1.0) : (hash1(cc, seed + 5) < 0.5 ? 1.0 : -1.0);
     float dd = length(g - C);
     float w = 1.0 - smoothstep(0.9, 1.45, dd);
-    if (w > 0.0) invVortexAt(g, Jg, C, a.w / cell, b.x / cell, b.y / cell, b.z / cell, sgn, w);
+    // the ramp mode (r < 0) takes z as an angle, which must not be scaled with the cell; the 1/d mode takes mm·rad
+    if (w > 0.0) invVortexAt(g, Jg, C, b.y < 0.0 ? a.w : a.w / cell, b.x / cell, b.y / cell, b.z / cell, sgn, w);
   }
   t.S = c.xy + transpose(R) * (g * cell);
   t.J = transpose(R) * Jg * cell;
