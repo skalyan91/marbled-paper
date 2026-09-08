@@ -800,18 +800,21 @@ export const RECIPES: Recipe[] = [
   { name: "French curl on Nonpareil", group: "Curled", palette: "dp21", palettes: ["dp21", "frenchcurl19b"], terms: ["french curl on nonpareil"], defaults: { ...D19, ...COMBED_LOOK, curlStrength: 1 }, note: "Nonpareil base, then swirled.",
     build: (p, pal) => { const b = nonpareilBase(new Builder(p, pal)); b.vortexGrid(105, { z: 1.0 * 6.2832 * 8, r: 25, core: 8, L: 8 + 30 * p.viscosity, alt: 0 }); /* dp 21: about one turn at an 8 mm core, the winding falling off as 1/d (the rows deflected, not wound, beyond ~25 mm), wound regions 70–80 mm across, ~100 mm apart, all the same sense */ return b.drift().scene(); } },
 
-  { name: "Placard (Drawn stone)", group: "Curled", palette: "placard18", palettes: ["placard18"], terms: ["placard", "drawn stone", "mixed"], defaults: { ...D18, curlStrength: 1 }, note: "Red thrown generously, gall on it, a handful of huge slate and blue drops with ochre on top, gall again, then a stylus drawn freely across the bath and twirled: Schleicher's Drawn stone (dp 96–98, 102).",
+  { name: "Placard (Drawn stone)", group: "Curled", palette: "placard18", palettes: ["placard18"], terms: ["placard", "drawn stone", "mixed"], defaults: { ...D18, curlStrength: 1 }, note: "Red thrown generously, gall on it, a handful of huge slate, blue and ochre drops, gall again, then a stylus drawn freely across the bath in sweeps and hooks: Schleicher's Drawn stone (dp 96–98, 102).",
     build: (p, pal) => {
       const b = new Builder(p, pal);
       const h = (i: number) => hash01(p.seed, 900 + i);
-      // 1. Red ground as a film, no bath swirl, no fine dots (dp 97: 31–35 % of the sheet stays red).
+      // 1. Red ground as a film, no bath swirl, no fine dots (dp 97: a third of the sheet stays red).
       b.turkish({ spots: 0, swirl: 0, gallDots: false });
-      // 2. Gall on the red: bare-paper spots in the ground, 0.6 per cm², d50 3 mm, d90 8, up to 19 mm.
-      b.sprinkleStats(-1, { perCm2: 0.6, d50: 3, sig: 0.8, wk: 1.3 }, { style: STYLE.CLEAR, anim: 1 });
+      // 2. Gall on the red, in two populations (dp 97 at 600 dpi): large ovals 6–15 mm, about one per 4 cm², and fine
+      //    dots 2–4 mm, 1.5 per cm². Both are bare paper.
+      b.sprinkleStats(-1, { perCm2: 0.12, d50: 7, sig: 0.5, wk: 1.2 }, { style: STYLE.CLEAR, anim: 1 });
+      b.sprinkleStats(-1, { perCm2: 0.6, d50: 2.2, sig: 0.5, wk: 1.3 }, { style: STYLE.CLEAR, anim: 1.2 });
       // 3. A handful of huge drops. The mixture model of dp 97 gives slate ("green" in the catalogue's words, 33 %), blue
       //    (3 %) and yellow-ochre (6 %), plus two tans that are the red film drawn thin by the stylus, not colours thrown:
       //    those (a lighter variant of the ground's hue) are left out. Largest coverage first, the ochre last: it always
-      //    lies on the slate or blue (dp 97, 98). Slate 35–45 mm (2–4 per sheet), blue 20–45 mm (2–3), ochre 20–25 mm.
+      //    lies on the slate or blue (dp 97, 98). Two to four drops per sheet of each (0.02 per cm²), 30–50 mm across;
+      //    the sizes are the palette's, which the coverage fitter drives.
       const rgbOf = (c: number) => [1, 3, 5].map((i) => parseInt(pal.pigments[c].hex.slice(i, i + 2), 16));
       const hueOf = (c: number) => { const [r, g, bb] = rgbOf(c); return (Math.atan2(Math.sqrt(3) * (g - bb), 2 * r - g - bb) * 180) / Math.PI; };
       const dh = (x: number, y: number) => Math.abs((((x - y) % 360) + 540) % 360 - 180);
@@ -819,26 +822,29 @@ export const RECIPES: Recipe[] = [
       const thinned = (c: number) => dh(hueOf(c), hueOf(gnd)) < 30 && luma(pal.pigments[c].hex) > luma(pal.pigments[gnd].hex) + 0.08;
       const yellowish = (c: number) => dh(hueOf(c), 60) < 40 && luma(pal.pigments[c].hex) > 0.45;
       const bigs = pal.spots.filter((c) => !thinned(c)).sort((x, y) => (yellowish(x) ? 1 : 0) - (yellowish(y) ? 1 : 0) || (pal.pigments[y].frac ?? 0) - (pal.pigments[x].frac ?? 0)).slice(0, 3);
-      //    Two to four drops per sheet of each (0.02 per cm²); the sizes are the palette's, which the coverage fitter drives.
       bigs.forEach((c) => { ensureStats(pal, c, 20, 0.02); b.sprinkleStats(c, { ...b.statsOf(c), perCm2: 0.02, sig: 0.3, wk: 1 }, { anim: 0.4, jitter: 0.45 }); });
-      // 4. Gall last: fine clear spots inside every colour, 2 per cm², d50 2 mm, d90 5 mm.
-      b.sprinkleStats(-1, { perCm2: 2, d50: 2, sig: 0.6, wk: 1.3 }, { style: STYLE.CLEAR, anim: 1.2 });
-      // 5. Four to six stylus sweeps 40–90 mm long, wake 6–9 mm: they draw the drops into 50–60 mm teardrops (the "light
-      //    combing" of the catalogue is the bundles of filaments beside each sweep).
-      const L = 6 + 3 * p.viscosity;
-      for (let i = 0; i < 5; i++) {
+      // 4. Gall last: fine clear spots inside the drops, 2 per cm², d50 2.5 mm, a few to 8 mm.
+      b.sprinkleStats(-1, { perCm2: 0.8, d50: 2.5, sig: 0.6, wk: 1.3 }, { style: STYLE.CLEAR, anim: 1.2 });
+      // 5. The stylus. Five free sweeps 40–90 mm long with a wake 6–9 mm wide draw the drops into 50–60 mm teardrops (the
+      //    "light combing" of the catalogue is the bundles of filaments beside each sweep).
+      const L = 8 + 8 * p.viscosity;
+      for (let i = 0; i < 7; i++) {
         const x = (h(7 * i) - 0.5) * p.sheetW, y = (h(7 * i + 1) - 0.5) * p.sheetH;
-        const a = ((-75 + (h(7 * i + 2) - 0.5) * 80) * Math.PI) / 180 + (p.animate ? 0.08 * Math.sin(0.1 * p.time + i) : 0), len = 40 + 50 * h(7 * i + 3);
+        const a = ((-75 + (h(7 * i + 2) - 0.5) * 80) * Math.PI) / 180 + (p.animate ? 0.08 * Math.sin(0.1 * p.time + i) : 0), len = 50 + 60 * h(7 * i + 3);
         b.stroke(x, y, x + Math.cos(a) * len, y + Math.sin(a) * len, L);
       }
-      // 6. One to three curls per sheet, 65–95 mm apart, all the same sense, of the three kinds seen on dp 96–98 and 102:
-      //    a loop (1.25 turns from 22 mm in to a 6 mm core), a tight spiral (3 turns, 20 → 4 mm) and a circle (0.7 turn in a
-      //    ring from 28 to 22 mm, the inside turned as a body). Even pitch: the stylus path itself.
-      const kinds: [number, number, number][] = [[0.8 * 6.2832, 22, 6], [2 * 6.2832, 20, 4], [0.45 * 6.2832, 28, 20]];
+      //    Its curls are hooks (dp 97 at 600 dpi): the same sweep bent through half to three-quarters of a turn on a radius
+      //    of 12–20 mm, the paint dragged along the arc with the sweep's wake, not a disc wound into rings. One to three
+      //    per sheet, 65–95 mm apart, all turning the same way. An arc is a chain of short strokes.
       const n = 1 + Math.floor(h(50) * 3), sgn = h(51) < 0.5 ? 1 : -1;
       for (let i = 0; i < n; i++) {
-        const [th, R, core] = kinds[Math.floor(h(60 + i) * 3)];
-        b.vortex((h(70 + i) - 0.5) * p.sheetW * 0.7, (h(80 + i) - 0.5) * p.sheetH * 0.8, th * p.curlStrength, 6 + 40 * p.viscosity, -R, core, sgn);
+        const cx = (h(70 + i) - 0.5) * p.sheetW * 0.7, cy = (h(80 + i) - 0.5) * p.sheetH * 0.8;
+        const R = (15 + 10 * h(90 + i)) * p.curlStrength, a0 = h(100 + i) * 2 * Math.PI, sweep = sgn * Math.PI * (1.1 + 0.6 * h(110 + i));
+        const segs = Math.max(3, Math.ceil(Math.abs(sweep) / (Math.PI / 4)));
+        for (let k = 0; k < segs; k++) {
+          const t0 = a0 + (sweep * k) / segs, t1 = a0 + (sweep * (k + 1)) / segs;
+          b.stroke(cx + R * Math.cos(t0), cy + R * Math.sin(t0), cx + R * Math.cos(t1), cy + R * Math.sin(t1), L * 1.4);
+        }
       }
       return b.drift().scene(); } },
 

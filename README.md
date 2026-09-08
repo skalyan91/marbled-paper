@@ -151,9 +151,11 @@ measured on the scans: ≈1.2–1.5 spacings for fine combs, 2–6 for the get-g
   carries the drag well beyond the path. French curl on Turkish is a 70 mm disc turned
   1.5 times with all the shear in a 35–55 mm ring; on Nonpareil 1.1 turns from 38 mm in to an
   8 mm core; on Fountain 2.25 turns from 55 mm in to 9 mm, one column of curls per sheet.
-- Placard (dp 97 at 600 dpi): a red film with bare-paper spots, then two to four slate drops of
-  35–45 mm and two to three blue of 20–45 mm, ochre of 20–25 mm on top of them, fine gall over
-  everything, five stylus sweeps and one to three curls (loops, tight spirals or a rigid circle).
+- Placard (dp 97 at 600 dpi): a red film with bare-paper spots in two populations (ovals of
+  6–15 mm and dots of 2–4 mm), then two to four huge slate drops and two to three blue, ochre on
+  top of them, fine gall over everything, seven stylus sweeps that draw the drops into teardrops,
+  and one to three hooks: the sweep bent through half to three-quarters of a turn on a 15–25 mm
+  radius, the paint dragged along the arc, not a disc wound into rings.
 - Gloster is a Zebra whose last colour was cut with turpentine (dp 65): small dense spots drawn by
   the wide comb into 0.3–1.5 mm hair lines on a maroon ground, then the navy thrown as large round
   drops (0.25 per cm², up to 32 mm) speckled with paper openings of a fixed physical scale (0.3 mm,
