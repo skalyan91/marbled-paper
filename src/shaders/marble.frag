@@ -433,7 +433,8 @@ void invVortexGrid(inout Trace t, vec4 a, vec4 b, vec4 c, vec4 d) {
     float sgn = b.w > 0.5 ? (((cc.x + cc.y) & 1) == 0 ? 1.0 : -1.0) : (hash1(cc, seed + 5) < 0.5 ? 1.0 : -1.0);
     float dd = length(g - C);
     float w = 1.0 - smoothstep(0.9, 1.45, dd);
-    if (w > 0.0) invVortexAt(g, Jg, C, a.w / cell, b.x / cell, b.y / cell, b.z / cell, sgn, w);
+    // the ramp mode (r < 0) takes z as an angle, which must not be scaled with the cell; the 1/d mode takes mm·rad
+    if (w > 0.0) invVortexAt(g, Jg, C, b.y < 0.0 ? a.w : a.w / cell, b.x / cell, b.y / cell, b.z / cell, sgn, w);
   }
   t.S = c.xy + transpose(R) * (g * cell);
   t.J = transpose(R) * Jg * cell;
@@ -665,12 +666,42 @@ float transferShade(vec2 P, float lodScr) {
 
 struct Shaded { vec3 rgb; float cov; float stretch; };
 
+// Schrottel's eyes as features of the disc they reacted with: q is the offset from the drop's centre in material mm,
+// so the eyes ride with the drop. Two lattices of feature points (cellMm apart) carry cores of heavy-tailed radius
+// (mm) inside paper halos of outer radius 0.275 mm + core (dp 76). Returns 2 inside a core, 1 in a halo, 0 outside.
+int eyesAt(vec2 q, float cellMm, float fillFrac, float base, float tail, float cap, int seed) {
+  vec2 g = q / cellMm;
+  ivec2 b0 = ivec2(floor(g));
+  int best = 0;
+  for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
+    ivec2 cc = b0 + ivec2(i, j);
+    vec4 hh = hash4(cc, seed);
+    if (hh.w > fillFrac) continue;
+    vec2 C = vec2(cc) + hh.xy;
+    float d = length(g - C) * cellMm;
+    float rc = min(cap, base + tail * (-log(max(1.0 - hh.z, 1e-4))));
+    if (d < rc) return 2;
+    if (d < rc + 0.275) best = 1;
+  }
+  return best;
+}
+
 Shaded shadePattern(Hit h, vec2 P, vec3 paper, float lodScr, float tooth, int gf) {
   Shaded s;
   s.stretch = 1.0;
   s.cov = 0.0;
   s.rgb = paper;
   if (h.hit && h.color < 0) return s;           // clear (gall) spot: the film was pushed aside, paper shows
+  // EYES: the shower of dispersant eyes carried by this drop (Schrottel): a fine lattice of small eyes and a sparse one of
+  // large; a core shows the ground through the opened film, the halo the paper
+  if (h.hit && (int(uLayerStyle[h.layer].x + 0.5) & 4096) != 0) {
+    float ul = length(h.u);
+    float Rmm = h.ePx / max(1.0 - ul, 0.02) / uPxPerMm;   // the drop's radius in mm, from the edge distance
+    vec2 q = h.u * Rmm;
+    int e = max(eyesAt(q, 5.5, 0.9, 0.25, 0.3, 2.3, h.layer + 31), eyesAt(q, 35.0, 0.5, 1.5, 1.2, 4.5, h.layer + 32));
+    if (e == 2) { s.rgb = gf >= 0 ? col[gf].rgb : vec3(0.1); s.cov = 1.0; return s; }
+    if (e == 1) return s;
+  }
   // EYE: outside the core the dispersant cleared every film to the paper (Schrottel's cream halos)
   if (h.hit && (int(uLayerStyle[h.layer].x + 0.5) & 2048) != 0 && length(h.u) > uLayerStyle[h.layer].y + 0.05) { s.rgb = mix(paper, s.rgb, 0.0); return s; }
   if (!h.hit) {
