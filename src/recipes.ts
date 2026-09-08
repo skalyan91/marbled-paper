@@ -211,7 +211,7 @@ const PALETTES_RAW: Palette[] = [
     pigments: [B("red", "#AD3149", 21.7, 0.96, 0.5), F("indigo", "#3E3C70", 8.1, 0.98, 2.48, 0.53, 0.95, 0.5), F("dark teal", "#374144", 5.9, 0.91, 1.65, 0.49, 0.95, 0.5), F("maroon", "#7E4F5A", 35.9, 2.57, 2.91, 0.43, 0.95, 0.5), F("orange", "#BA6154", 11.8, 0.98, 1.6, 0.54, 0.95, 0.5), F("cream", "#DAA995", 16.6, 1.66, 1.32, 0.46, 0.95, 0.5), WHITE],
     background: 0, spots: [1, 2, 3, 4, 5], paperPct: 0.0, white: 6 },
   { key: "dp75", name: "19th-c. Double comb waved (dp 75): crimson, red, grey-blue, tan, orange, pale pink", source: "dp 75", streak: [73.2, 0.214, 59.4, 0.074], paper: "#E4D4B8",
-    pigments: [B("crimson", "#7E000A", 61.4, 0.96, 0.5), F("red", "#922C2D", 11.8, 0.35, 0.42, 0.17, 0.95, 0.5), F("grey-blue", "#806773", 7.3, 0.45, 1.51, 0.59, 0.95, 0.5), F("tan", "#CD6A5D", 7.0, 0.5, 0.43, 0.21, 0.95, 0.5), F("orange", "#EF9755", 5.7, 0.63, 1.41, 0.5, 0.95, 0.5), F("pale pink", "#FFC6B2", 6.8, 1.12, 1.1, 0.44, 0.95, 0.5), WHITE],
+    pigments: [B("crimson", "#7E000A", 61.4, 0.96, 0.5), F("red", "#922C2D", 11.8, 0.35, 0.72, 0.17, 0.95, 0.5), F("grey-blue", "#806773", 7.3, 0.45, 1.51, 0.59, 0.95, 0.5), F("tan", "#CD6A5D", 7.0, 0.5, 1.09, 0.21, 0.95, 0.5), F("orange", "#EF9755", 5.7, 0.63, 1.41, 0.5, 0.95, 0.5), F("pale pink", "#FFC6B2", 6.8, 1.12, 1.1, 0.44, 0.95, 0.5), WHITE],
     background: 0, spots: [1, 2, 3, 4, 5], paperPct: 0.0, white: 6 },
   { key: "dp87", name: "19th-c. Gloster on Serpentine (dp 87): red, indigo, dark grey, maroon, speckled grey, ochre", source: "dp 87", streak: [104.6, 0.121, 95.5, 0.126], paper: "#D9CBC6",
     pigments: [B("red", "#801323", 35.6, 0.96, 0.5), F("indigo", "#37405B", 16.3, 0.7, 2.87, 0.72, 0.95, 0.5), F("dark grey", "#3E3D3A", 8.5, 0.62, 2.16, 0.69, 0.95, 0.5), F("maroon", "#6D2F33", 14.2, 1.65, 0.6, 0.4, 0.95, 0.5), F("grey", "#948D90", 15.7, 0.83, 2.4, 0.5, 0.95, 0.5), F("ochre", "#AC714A", 8.6, 0.41, 0.63, 0.68, 0.95, 0.5), WHITE],
@@ -733,7 +733,7 @@ export const RECIPES: Recipe[] = [
          reversing every half wave. Tongues that lean with the wave were cut by the comb that was drawn along it: the last comb is
          the 10 mm one, drawn down the sheet along a wave of ±15 mm over ~95 mm and pulled hard, over a nonpareil of a finer comb
          (Wolfe: a nonpareil, then a comb with wider teeth drawn once more in a wavy line). dp 471 (Guyot) is finer, ~5 mm tongues. */
-      const b = nonpareilBase(new Builder(p, pal), 10, { bold: 3, skipFine: true }); // get-gel bands 3–5 mm (dp 75) and nothing finer: the sheet shows no subdivision inside the tongues
+      const b = nonpareilBase(new Builder(p, pal), 2.5, { bold: 3, ripple: 2.2, plateau: 12 }); // a fine nonpareil of 2.5 mm: four subdivisions inside every 10 mm tongue (dp 75), on get-gel bands 3–5 mm
       b.wavyComb(-90, 10, 15, 95, { alternate: false, ripple: 3, plateau: 12 });
       return b.drift().scene(); } },
 

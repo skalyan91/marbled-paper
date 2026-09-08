@@ -150,9 +150,9 @@ measured on the scans: ≈1.2–1.5 spacings for fine combs, 2–6 for the get-g
   bouquets and the eyes. Serpentine is the double get-gel (its second, halving pass leaves the
   small nested tongues every hairpin carries) and one 21 mm comb drawn down the sheet along a
   14 mm swing (dp 69, 164); its Turkish base throws many medium drops so every hairpin carries
-  every colour. Double comb waved (dp 75) is the get-gel bands (3–5 mm, nothing finer) under a
-  10 mm comb drawn down the sheet along a wave of ±15 mm over 95 mm and pulled hard: the tongues
-  lean with the wave and their ranks reverse every half wave. Double comb is authored in dp 393's own frame: the get-gel drawn
+  every colour. Double comb waved (dp 75) is a fine nonpareil (2.5 mm comb on 3–5 mm bands) under
+  a 10 mm comb drawn down the sheet along a wave of ±15 mm over 95 mm and pulled hard: the tongues
+  lean with the wave, their ranks reverse every half wave, and each holds four subdivisions. Double comb is authored in dp 393's own frame: the get-gel drawn
   down the sheet, then a 4.5 mm comb and a 26 mm comb both moving left across the bands and
   both pulled hard (3 and 1.5 spacings), so every tongue, small and large, points left.
 - Hard-pulled combs use a hard-pull tongue profile, |cos πf|^0.3 · (1 − |2f|^p) across each
