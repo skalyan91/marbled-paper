@@ -35,6 +35,7 @@ export const STYLE = {
   SOFT: 256, // wet-paper soft edge (Morris)
   BROKEN: 512, // caustic fracture (Romantic)
   GALLDOTS: 1024, // sparse small clear "gall spots" inside later colours
+  EYE: 2048, // dispersant droplet: a core of the drop's colour inside a ring cleared to the paper; styleParam = core radius / drop radius (Schrottel)
 } as const;
 
 export function packOps(forwardOps: Op[]): { data: Float32Array; count: number } {

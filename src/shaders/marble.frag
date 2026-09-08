@@ -308,7 +308,7 @@ void invSprinkle(inout Trace t, vec4 a, vec4 b, vec4 c, vec4 d4) {
 //   The nine nearest tines are summed (the set changes at the mid-gap where the two ends
 //   contribute equally, so the sum is continuous); the mean is removed.
 // The mean drag (c.x) is removed in both.
-void invComb(inout Trace t, vec4 a, vec4 b, vec4 c) {
+void invComb(inout Trace t, vec4 a, vec4 b, vec4 c, vec4 d) {
   vec2 M = vec2(cos(a.y), sin(a.y));
   vec2 N = vec2(-M.y, M.x);
   float s = a.z, L = b.y;
@@ -316,8 +316,13 @@ void invComb(inout Trace t, vec4 a, vec4 b, vec4 c) {
   // wave is part of the kernel and two tine sets keep exactly the phase difference they were given, whatever the pull
   // (conjugating a straight comb by shears keyed to the stroke coordinate let the pull itself shift the phase)
   float phw = c.y * dot(t.S, M) + c.z;
-  float n = dot(t.S, N) - a.w - b.w * sin(phw);
-  float slope = b.w * c.y * cos(phw);          // d(tine offset)/d(stroke coordinate)
+  // wave shape: sinusoid, or (d.x > 0) a triangle wave of the same amplitude and period (Peacock: the two rows of
+  // straight zigzag lines cross into diamonds)
+  float wv, dwv;
+  if (d.x > 0.5) { wv = 0.63661977 * asin(clamp(sin(phw), -1.0, 1.0)); dwv = 0.63661977 * sign(cos(phw)); }
+  else { wv = sin(phw); dwv = cos(phw); }
+  float n = dot(t.S, N) - a.w - b.w * wv;
+  float slope = b.w * c.y * dwv;               // d(tine offset)/d(stroke coordinate)
   vec2 gN = N - slope * M;
   vec2 D = normalize(M + slope * N);           // a tine drags along the tangent of its path, not along the stroke axis
   float sum = 0.0, dsum = 0.0;
@@ -386,10 +391,22 @@ void invShear(inout Trace t, vec4 a, vec4 b) {
 void invVortexAt(inout vec2 S, inout mat2 J, vec2 C, float z, float L, float r, float core, float sgn, float w) {
   vec2 q = S - C;
   float d = length(q);
-  float dm = max(d, core);
-  float ex = exp(-max(0.0, d - r) / L);
-  float ang = -sgn * w * z * ex / dm;
-  float dang = ang * (-(d > r ? 1.0 / L : 0.0) - (d > core ? 1.0 / d : 0.0));
+  float ang, dang;
+  if (r < 0.0) {
+    // a stylus twirl of constant pitch (every curl measured, dp 16/20/21/23/96–98/102/156/272): the rotation is z radians
+    // inside the core radius (a rigidly turned disc) and ramps linearly to nothing at R = -r, where the stylus began;
+    // the paint between is wound into a spiral of even pitch, the paint outside R is untouched
+    float R = -r, wdt = max(R - core, 1e-3);
+    float t = clamp((R - d) / wdt, 0.0, 1.0);
+    float sm = t * t * (3.0 - 2.0 * t);
+    ang = -sgn * w * z * sm;
+    dang = sgn * w * z * 6.0 * t * (1.0 - t) / wdt;
+  } else {
+    float dm = max(d, core);
+    float ex = exp(-max(0.0, d - r) / L);
+    ang = -sgn * w * z * ex / dm;
+    dang = ang * (-(d > r ? 1.0 / L : 0.0) - (d > core ? 1.0 / d : 0.0));
+  }
   float cs = cos(ang), sn = sin(ang);
   mat2 Rm = mat2(cs, sn, -sn, cs);
   vec2 rq = Rm * q;
@@ -466,7 +483,7 @@ Trace trace(vec2 P, float mmPerPx, float fibre, int start, int count) {
     vec4 a = op[o], b = op[o + 1], c = op[o + 2], d = op[o + 3];
     int ty = int(a.x + 0.5);
     if (ty == 1) invSprinkle(t, a, b, c, d);
-    else if (ty == 2) invComb(t, a, b, c);
+    else if (ty == 2) invComb(t, a, b, c, d);
     else if (ty == 3) invShear(t, a, b);
     else if (ty == 4) invVortex(t, a, b);
     else if (ty == 5) invVortexGrid(t, a, b, c, d);
@@ -548,10 +565,18 @@ float styleCoverage(Hit h, inout vec3 colr, float lodMat, float sig) {
     cov *= 1.0 - smoothstep(0.80, 0.86, ul) * (1.0 - smoothstep(0.96, 1.0, ul));
     colr *= 1.0 - 0.28 * p * (1.0 - smoothstep(0.0, 0.7, ul));
   }
-  if ((st & 4) != 0) { // PARTRIDGE: speckled with clear cells
-    vec2 w = worley(h.u * (9.0 + 3.0 * hr.z), h.layer + 11);
-    cov *= mix(1.0, smoothstep(0.30 * p, 0.42 * p, w.x), fade);
-    colr *= 1.0 + 0.25 * (tnoise(h.u * 1.7 + hr.xy, 3.0).r - 0.5);
+  if ((st & 2048) != 0) cov *= 1.0 - smoothstep(p - 0.05, p + 0.05, ul);   // EYE: the core's soft edge
+  if ((st & 4) != 0) { // PARTRIDGE: a turpentine-cut colour, speckled with paper openings
+    // The openings have a fixed physical scale whatever the drop's size (dp 65: median 0.3 mm, ~1.4 per mm², plus a
+    // sparser 1–2 mm class; the same in 4 mm satellites and 30 mm drops), so they are evaluated in material mm, and a
+    // 1–2 mm rim of near-solid film is left at the drop's edge.
+    vec2 w = worley(h.S * 1.25 + hr.xy * 7.0, h.layer + 11);   // ~1.5 openings per mm², 0.3 mm across
+    vec2 w2 = worley(h.S * 0.45 + hr.zw * 5.0, h.layer + 12);   // ~0.2 per mm², ~1 mm across: these carry most of the open area
+    float open1 = 1.0 - smoothstep(0.15 * p, 0.22 * p, w.x);
+    float open2 = 1.0 - smoothstep(0.20 * p, 0.30 * p, w2.x);
+    float rim = smoothstep(0.6 * uPxPerMm, 1.8 * uPxPerMm, h.ePx);
+    cov *= 1.0 - fade * rim * max(open1, 0.8 * open2);
+    colr *= 1.0 + 0.25 * (tnoise(h.S * 0.25 + hr.xy, 3.0).r - 0.5);
   }
   if ((st & 8) != 0) { // SHOT: sparse eyes with a pale ring and dark centre
     vec2 w = worley(h.u * 3.5 + hr.xy * 4.0, h.layer + 23);
@@ -646,6 +671,8 @@ Shaded shadePattern(Hit h, vec2 P, vec3 paper, float lodScr, float tooth, int gf
   s.cov = 0.0;
   s.rgb = paper;
   if (h.hit && h.color < 0) return s;           // clear (gall) spot: the film was pushed aside, paper shows
+  // EYE: outside the core the dispersant cleared every film to the paper (Schrottel's cream halos)
+  if (h.hit && (int(uLayerStyle[h.layer].x + 0.5) & 2048) != 0 && length(h.u) > uLayerStyle[h.layer].y + 0.05) { s.rgb = mix(paper, s.rgb, 0.0); return s; }
   if (!h.hit) {
     if (gf >= 0) {                              // ground film: the first colour, thrown over the whole bath
       s.rgb = col[gf].rgb * (0.96 + 0.08 * (tnoise(h.S * 0.05, lodFor(lodScr, 0.05)).g - 0.5));
