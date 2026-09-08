@@ -152,10 +152,12 @@ measured on the scans: ≈1.2–1.5 spacings for fine combs, 2–6 for the get-g
   14 mm swing (dp 69, 164). Double comb is authored in dp 393's own frame: the get-gel drawn
   down the sheet, then a 4.5 mm comb and a 26 mm comb both moving left across the bands and
   both pulled hard (3 and 1.5 spacings), so every tongue, small and large, points left.
-- Hard-pulled combs use a plateau tongue profile, 1 − |2f|^3 across each tine's gap, instead of
-  the |cos|^0.6 arc: the paint inside a tongue moves almost rigidly with its tine and all the
-  stretching sits in a narrow zone at each cusp, so long small tongues keep their colour whole
-  (dp 393, 172). Combed recipes also take lighter paper texture (tooth, granulation, wear),
+- Hard-pulled combs use a hard-pull tongue profile, |cos πf|^0.3 · (1 − |2f|^p) across each
+  tine's gap (p ≈ 12 for the small tongues, 6 for the wider combs), instead of the |cos|^0.6
+  arc: a gently rounded head, near-parallel flanks (the paint inside a tongue rides almost
+  rigidly with its tine) and a cusp zone of about a tenth of the pitch where all the stretching
+  sits, as between the nested tongues of dp 172 and dp 393. The nested colour bands inside each
+  tongue survive, which the arc profile smeared to hair. Combed recipes also take lighter paper texture (tooth, granulation, wear),
   since at the full stone-sheet amounts the 0.2–1 mm texture turns 4 mm tongues to mud. Fountain is a 10 mm comb drawn across and back, then (on every UW sheet) stylus
   swirls ~165 mm apart (dp 156, 272). Placard is Schleicher's Drawn stone: a red film, the
   sheet's own few large drops, gall water, free stylus sweeps and loose twirls (dp 96–98, 102).

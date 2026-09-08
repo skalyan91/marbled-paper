@@ -322,14 +322,21 @@ void invComb(inout Trace t, vec4 a, vec4 b, vec4 c) {
   vec2 D = normalize(M + slope * N);           // a tine drags along the tangent of its path, not along the stroke axis
   float sum = 0.0, dsum = 0.0;
   if (b.z < 0.5 && c.w > 0.0) {
-    // plateau profile 1 - |2f|^p (f = offset from the nearest tine in spacings): the paint within a tongue moves almost
-    // rigidly with its tine and all the stretching happens in a narrow zone at each cusp, as under a hard-pulled comb;
-    // the heads are wide and flat-topped (dp 393's small tongues)
+    // hard-pull profile |cos πf|^0.3 · (1 - |2f|^p), f = offset from the nearest tine in spacings: a gently rounded head,
+    // near-parallel flanks (the paint inside a tongue rides almost rigidly with its tine) and a cusp zone of a tenth of the
+    // pitch where all the stretching sits, as between the nested tongues of dp 172 and dp 393
     float f = n / s; f -= floor(f + 0.5);         // -0.5 .. 0.5
     float u = abs(2.0 * f);
     float up = pow(max(u, 1e-4), c.w - 1.0);
-    sum = 1.0 - up * u;
-    dsum = -c.w * up * sign(f) * 2.0 / s;
+    float P = 1.0 - up * u;
+    float dP = -c.w * up * sign(f) * 2.0 / s;
+    float ph = 3.14159265 * f;
+    float cs = cos(ph);
+    float ac = max(abs(cs), 1e-3);
+    float R = pow(ac, 0.3);
+    float dR = -0.3 * pow(ac, -0.7) * sin(ph) * sign(cs) * 3.14159265 / s;
+    sum = R * P;
+    dsum = dR * P + R * dP;
   } else if (b.z < 0.5) {
     // |cos|^0.6: flatter tongue tops and narrower cusp zones than the plain cosine, so the film is stretched thin
     // only in a thin line at each mid-gap (dp 82: crisp tongue interiors, hair-thin cusps)
