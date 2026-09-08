@@ -141,12 +141,14 @@ measured on the scans: ≈1.2–1.5 spacings for fine combs, 2–6 for the get-g
   times its amplitude (dp 174), so with the amplitude at half the line separation the cells come
   out squarish, and a horizontal Bouquet is a horizontal nonpareil (a sheet can carry an explicit
   `orient`); Peacock's waves are triangular, so the two rows cross into diamonds (dp 144).
-- A stylus twirl in a viscous film: inside the stylus path the record is kinematic, the paint in a
-  core turning as a body and the winding keeping an even pitch out to the radius where the stylus
-  began (dp 16, 20, 21, 23, 96–98, 102, 156, 272); outside the path the film is dragged round by
-  viscosity alone, as (R/d)² (a rotating disc in a Stokes film) damped over a length that grows
-  with the size's viscosity, so a thin size leaves the surroundings still and a thick one carries
-  the twist well beyond the path. French curl on Turkish is a 70 mm disc turned
+- A stylus twirl in a viscous film is drag more than swirl. Where the stylus went round a circle
+  (dp 20, 98) the spots inside stay intact and the ones under its path are drawn into tangential
+  streaks, about a third of a turn of relative rotation across a 30 mm ring; where it spiralled
+  inward (dp 21, 156, 272) the rows are wound about a turn within 20 mm of the centre and only
+  deflected beyond 30 mm, the 1/d profile with a small core. Outside the path the film is dragged
+  round by viscosity alone, as (R/d)² (a rotating disc in a Stokes film) damped over a length that
+  grows with the size's viscosity, so a thin size leaves the surroundings still and a thick one
+  carries the drag well beyond the path. French curl on Turkish is a 70 mm disc turned
   1.5 times with all the shear in a 35–55 mm ring; on Nonpareil 1.1 turns from 38 mm in to an
   8 mm core; on Fountain 2.25 turns from 55 mm in to 9 mm, one column of curls per sheet.
 - Placard (dp 97 at 600 dpi): a red film with bare-paper spots, then two to four slate drops of

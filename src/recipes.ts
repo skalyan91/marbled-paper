@@ -791,14 +791,14 @@ export const RECIPES: Recipe[] = [
       if (!hasWhiteSpot(pal)) b.sprinkleStats(pal.white, b.statsOf(pal.white, { perCm2: 0.06, d50: 2.5, wk: 0.9 }), { anim: 0.6 }); // sparingly: a few dots per palm on dp 156
       // French curl: swirls 190–220 mm apart on a staggered lattice, the wound disc ~90 mm across, the rows still bent 20–40°
       // at 80–90 mm from the centre; the sense varies from sheet to sheet (dp 156 both the same way, dp 272 alternating).
-      b.vortexGrid(180, { z: 2.25 * 6.2832, r: -55, core: 9, L: 6 + 40 * p.viscosity, jitter: 0.15, alt: 0 }); // dp 156/272: curls 160–200 mm apart in one column, wound region 100–120 mm across, 2–2.5 turns of even 10–20 mm pitch from 55 mm in to a 9 mm core, all the same sense
+      b.vortexGrid(180, { z: 1.2 * 6.2832 * 9, r: 30, core: 9, L: 10 + 40 * p.viscosity, jitter: 0.15, alt: 0 }); // dp 156/272 (crop at 10 mm grid): about a turn within 20 mm of the centre, half a turn at 30, a slight deflection at 55; the rows are dragged round, not wound into rings // dp 156/272: curls 160–200 mm apart in one column, wound region 100–120 mm across, 2–2.5 turns of even 10–20 mm pitch from 55 mm in to a 9 mm core, all the same sense
       return b.drift().scene(); } },
 
   { name: "French curl on Turkish", group: "Curled", palette: "frenchcurl19", palettes: ["frenchcurl19", "frenchcurl19b", "dp16", "placard18"], terms: ["french curl", "curl", "snail"], defaults: { ...D19, curlStrength: 1 }, note: "Stone base swirled with a stylus at regular intervals.",
-    build: (p, pal) => { const b = new Builder(p, pal); turkishBase(b); b.vortexGrid(150, { z: 1.5 * 6.2832, r: -55, core: 35, L: 6 + 40 * p.viscosity, jitter: 0.2, alt: 0 }); /* dp 20: a rigidly turned disc 70 mm across with all the shear in a ring from 35 to 55 mm (spots inside intact, 5–8 mm spots in the ring drawn to hair), ~1.5 turns, curls 135–175 mm apart */ return b.drift().scene(); } },
+    build: (p, pal) => { const b = new Builder(p, pal); turkishBase(b); b.vortexGrid(150, { z: 0.3 * 6.2832, r: -55, core: 25, L: 10 + 50 * p.viscosity, jitter: 0.2, alt: 0 }); /* dp 20: the stylus went round a circle ~55 mm in radius; the spots inside stay intact, the ones under its path (30–55 mm) are drawn into tangential streaks (strain ~5, about 0.4 turn of relative rotation across the ring), and the surroundings are dragged round less and less with distance. Not a spiral: drag, not swirl. Curls 135–175 mm apart */ return b.drift().scene(); } },
 
   { name: "French curl on Nonpareil", group: "Curled", palette: "dp21", palettes: ["dp21", "frenchcurl19b"], terms: ["french curl on nonpareil"], defaults: { ...D19, ...COMBED_LOOK, curlStrength: 1 }, note: "Nonpareil base, then swirled.",
-    build: (p, pal) => { const b = nonpareilBase(new Builder(p, pal)); b.vortexGrid(105, { z: 1.1 * 6.2832, r: -38, core: 8, L: 6 + 40 * p.viscosity, alt: 0 }); /* dp 21: wound regions 70–80 mm across, ~1.1 turns of even pitch from 38 mm in to an 8 mm core, ~100 mm apart, all the same sense */ return b.drift().scene(); } },
+    build: (p, pal) => { const b = nonpareilBase(new Builder(p, pal)); b.vortexGrid(105, { z: 1.0 * 6.2832 * 8, r: 25, core: 8, L: 8 + 30 * p.viscosity, alt: 0 }); /* dp 21: about one turn at an 8 mm core, the winding falling off as 1/d (the rows deflected, not wound, beyond ~25 mm), wound regions 70–80 mm across, ~100 mm apart, all the same sense */ return b.drift().scene(); } },
 
   { name: "Placard (Drawn stone)", group: "Curled", palette: "placard18", palettes: ["placard18"], terms: ["placard", "drawn stone", "mixed"], defaults: { ...D18, curlStrength: 1 }, note: "Red thrown generously, gall on it, a handful of huge slate and blue drops with ochre on top, gall again, then a stylus drawn freely across the bath and twirled: Schleicher's Drawn stone (dp 96–98, 102).",
     build: (p, pal) => {
@@ -834,7 +834,7 @@ export const RECIPES: Recipe[] = [
       // 6. One to three curls per sheet, 65–95 mm apart, all the same sense, of the three kinds seen on dp 96–98 and 102:
       //    a loop (1.25 turns from 22 mm in to a 6 mm core), a tight spiral (3 turns, 20 → 4 mm) and a circle (0.7 turn in a
       //    ring from 28 to 22 mm, the inside turned as a body). Even pitch: the stylus path itself.
-      const kinds: [number, number, number][] = [[1.25 * 6.2832, 22, 6], [3 * 6.2832, 20, 4], [0.7 * 6.2832, 28, 22]];
+      const kinds: [number, number, number][] = [[0.8 * 6.2832, 22, 6], [2 * 6.2832, 20, 4], [0.45 * 6.2832, 28, 20]];
       const n = 1 + Math.floor(h(50) * 3), sgn = h(51) < 0.5 ? 1 : -1;
       for (let i = 0; i < n; i++) {
         const [th, R, core] = kinds[Math.floor(h(60 + i) * 3)];

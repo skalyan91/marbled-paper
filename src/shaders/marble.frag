@@ -416,8 +416,8 @@ void invVortexAt(inout vec2 S, inout mat2 J, vec2 C, float z, float L, float r, 
     } else {
       float q = R / d, ex = exp(-(d - R) / max(L, 1e-3));
       float tail = q * q * ex;
-      ang = -sgn * w * z * 0.35 * tail;                       // the film at the path turns with the stylus only in part: it slips
-      dang = -sgn * w * z * 0.35 * tail * (-2.0 / d - 1.0 / max(L, 1e-3));
+      ang = -sgn * w * z * 0.6 * tail;                        // the film at the path turns with the stylus only in part: it slips
+      dang = -sgn * w * z * 0.6 * tail * (-2.0 / d - 1.0 / max(L, 1e-3));
     }
   } else {
     float dm = max(d, core);
