@@ -691,6 +691,7 @@ function fitRecipe(name: string, iters = 8, paletteKey?: string) {
   PALETTES,
   showScene(scene: Scene | null, pal: Palette) { customScene = scene ? { scene, pal } : null; paletteObj = pal; markDirty(); },
   params: currentParams,
+  RECIPES,
   layers,
   /** Upload an arbitrary scene (built with marble.Builder) and measure its coverage. */
   measureScene(scene: Scene, pal: Palette) {

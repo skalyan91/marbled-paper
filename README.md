@@ -129,11 +129,14 @@ measured on the scans: ≈1.2–1.5 spacings for fine combs, 2–6 for the get-g
   one or more colours splashed on as large drops that sit on the bands (dp 15, 386). In all
   three the colours whose spots stayed round on the sheet (measured elongation below 2.2) are
   held back from the base and thrown after the combing.
-- Wavy combs (Serpentine, Bouquet, Peacock) are straight combs conjugated by a sinusoidal
-  shear; since particles then follow the sinusoid at constant offset, this is the curved-tine
-  drag. Two interleaved tine sets in opposite phase give the staggered fans; the fan shape is
-  set by the drag regime (small drag → closed scallops; larger drag → connected S-waves),
-  verified with a forward-model sweep.
+- Wavy combs (Serpentine, Bouquet, Peacock, Icarus) carry the sinusoidal path inside the comb
+  kernel: every tine sits at its offset plus A·sin(2πy/λ) across the stroke and drags the paint
+  along the tangent of its path. Conjugating a straight comb by shears keyed to the stroke
+  coordinate was not equivalent, because the pull itself moves the paint along the stroke and
+  so shifted the phase of the second row of teeth by up to a quarter period. Two rows half a
+  spacing apart and in opposite phase now stay exactly half a period apart however hard the
+  comb is pulled; with A equal to half the separation of adjacent lines the lines touch once a
+  wavelength and quilt the sheet into closed cells (the bouquets and the peacock eyes).
 - Patterns the catalogue describes as made "on a Turkish base" start from the Turkish (Stone)
   structure (a generous ground, spots in order, rings, gall dots, residual swirl), but every
   parameter is deduced from the finished sheet: the palette's measured spot statistics,
@@ -146,11 +149,14 @@ measured on the scans: ≈1.2–1.5 spacings for fine combs, 2–6 for the get-g
   neighbouring lines touch once a wavelength and quilt the sheet into closed cells: the
   bouquets and the eyes. Serpentine is the double get-gel and one 21 mm comb drawn down the
   sheet along a 14 mm swing (dp 69, 164). Double comb is an ordinary Nonpareil (4.5 mm) plus
-  one lightly pulled 26 mm comb drawn the same way with the same arc profile, so the big tongue
-  heads point with the small ones and the hair-line cusps between them bound the columns
-  (dp 393). Fountain is a 10 mm comb drawn across and back, then (on every UW sheet) stylus
+  one 26 mm comb drawn the same way with the same arc profile and pulled hard (1.2 spacings),
+  so the big tongue heads point with the small ones and run past a column width, and the
+  cusps between the columns draw out into the hair-line rows of dp 393. Fountain is a 10 mm comb drawn across and back, then (on every UW sheet) stylus
   swirls ~165 mm apart (dp 156, 272). Placard is Schleicher's Drawn stone: a red film, the
   sheet's own few large drops, gall water, free stylus sweeps and loose twirls (dp 96–98, 102).
+- The op chain holds 36 operators per pattern (72 in the uniform buffer with the under-pattern
+  of a double marble); a recipe that overflows it warns in the console, because the shader
+  keeps the first operators and would silently drop the last passes.
 - Spot sizes follow a shifted Weibull (1.2 mm floor) with a per-colour shape fitted on the
   scans; Weibull beat log-normal, gamma, exponential and Pareto by AIC across 43 colours.
 

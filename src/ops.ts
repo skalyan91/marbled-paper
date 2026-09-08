@@ -13,7 +13,7 @@ export const OP = {
   STRETCH: 7, // anisotropic scale (paper dragged while laying)
 } as const;
 
-export const MAX_OPS = 24;
+export const MAX_OPS = 36; // per chain; the shader declares 2 × this (top and under pattern)
 export const FLOATS_PER_OP = 16;
 
 export interface Op {

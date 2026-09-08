@@ -9,7 +9,7 @@ precision highp int;
 precision highp sampler2DArray;
 
 #define NEIGH __NEIGH__
-#define MAX_OPS 48
+#define MAX_OPS 72
 #define TILE 128
 
 uniform vec2 uResolution;
@@ -312,7 +312,14 @@ void invComb(inout Trace t, vec4 a, vec4 b, vec4 c) {
   vec2 M = vec2(cos(a.y), sin(a.y));
   vec2 N = vec2(-M.y, M.x);
   float s = a.z, L = b.y;
-  float n = dot(t.S, N) - a.w;
+  // a comb drawn along a sinusoidal path: every tine sits at offset + b.w·sin(c.y·(M·S) + c.z) across the stroke, so the
+  // wave is part of the kernel and two tine sets keep exactly the phase difference they were given, whatever the pull
+  // (conjugating a straight comb by shears keyed to the stroke coordinate let the pull itself shift the phase)
+  float phw = c.y * dot(t.S, M) + c.z;
+  float n = dot(t.S, N) - a.w - b.w * sin(phw);
+  float slope = b.w * c.y * cos(phw);          // d(tine offset)/d(stroke coordinate)
+  vec2 gN = N - slope * M;
+  vec2 D = normalize(M + slope * N);           // a tine drags along the tangent of its path, not along the stroke axis
   float sum = 0.0, dsum = 0.0;
   if (b.z < 0.5) {
     // |cos|^0.6: flatter tongue tops and narrower cusp zones than the plain cosine, so the film is stretched thin
@@ -331,8 +338,8 @@ void invComb(inout Trace t, vec4 a, vec4 b, vec4 c) {
       dsum -= u / (w * L);
     }
   }
-  t.S -= b.x * (sum - c.x) * M;
-  t.J = rank1(t.J, M, N, -b.x * dsum);
+  t.S -= b.x * (sum - c.x) * D;
+  t.J = rank1(t.J, D, gN, -b.x * dsum);
 }
 
 // a=(type,theta,A,k) b=(phi, noise amp mm, mm per noise unit, seed offset)
