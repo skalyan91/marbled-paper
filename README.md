@@ -140,9 +140,7 @@ measured on the scans: ≈1.2–1.5 spacings for fine combs, 2–6 for the get-g
 - Fan combs follow two rules read off the sheets: in a Bouquet the wave's period is about four
   times its amplitude (dp 174), so with the amplitude at half the line separation the cells come
   out squarish, and a horizontal Bouquet is a horizontal nonpareil (a sheet can carry an explicit
-  `orient`); Peacock's waves are triangular, so the two rows cross into diamonds (dp 144), and its
-  base is Turkish, without tongues. Both fan combs are pulled hard (0.8 and 1.0 spacings) on the
-  rigid-interior profile, so the cells deform strongly while the paint inside them holds together.
+  `orient`); Peacock's waves are triangular, so the two rows cross into diamonds (dp 144).
 - A stylus twirl is recorded as its own path: the paint inside a core radius turns as a body and
   the winding has an even pitch out to the radius where the stylus began, beyond which nothing
   moves (dp 16, 20, 21, 23, 96–98, 102, 156, 272). French curl on Turkish is a 70 mm disc turned
@@ -155,15 +153,11 @@ measured on the scans: ≈1.2–1.5 spacings for fine combs, 2–6 for the get-g
   the wide comb into 0.3–1.5 mm hair lines on a maroon ground, then the navy thrown as large round
   drops (0.25 per cm², up to 32 mm) speckled with paper openings of a fixed physical scale (0.3 mm,
   with a sparser 1 mm class carrying most of the open area) inside a 1–2 mm solid rim.
-- Schrottel (dp 76): the shot mixture is grey discs with fuzzy edges on a jittered 15 mm lattice
-  (median 8.5 mm) that merge where they touch into loose agglomerations. The eyes form by reaction
-  with the mixture, so they are features of the discs and move with them: a shower, Poisson at
-  every size, of heavy-tailed dark cores (median 0.5 mm, a few of 2–4 mm) showing the ground
-  through the opened film, inside paper halos of outer diameter 0.55 mm + twice the core. The
-  Christaller look is the size hierarchy, not regular spacing of the large ones.
-- Palettes come from full-covariance Gaussian mixtures in Lab, never k-means; the Placard and
-  Gloster palettes were re-derived that way from dp 97 and dp 65 (the mixture's pale component on
-  dp 97 is the bare paper, a fifth of the sheet, and on dp 65 the sand inside the navy drops).
+- Schrottel (dp 76): the shot mixture is grey discs on a jittered 15 mm lattice (median 8.5 mm)
+  that merge where they touch into loose agglomerations, and the eyes are a separate shower,
+  Poisson at every size: heavy-tailed dark cores (median 0.5 mm, a few of 2–4 mm) in paper halos
+  of outer diameter 0.55 mm + twice the core. The Christaller look is the size hierarchy, not
+  regular spacing of the large ones.
 - Patterns the catalogue describes as made "on a Turkish base" start from the Turkish (Stone)
   structure (a generous ground, spots in order, rings, gall dots, residual swirl), but every
   parameter is deduced from the finished sheet: the palette's measured spot statistics,

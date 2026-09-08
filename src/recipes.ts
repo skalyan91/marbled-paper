@@ -80,16 +80,16 @@ const PALETTES_RAW: Palette[] = [
     pigments: [B("red", "#841710", 23.3, 0.96, 0.5), F("black", "#4C3932", 28.7, 1.4, 2.6, 0.66, 1, 0.4), F("blue", "#194A7A", 11.1, 0.9, 1.59, 0.58, 0.92, 0.55), F("ochre", "#D48F46", 4.8, 1.2, 0.97, 0.64, 1, 0.6), F("cream", "#D6C187", 16.8, 2.0, 1.24, 0.5, 1, 0.4), WHITE, K(E(F("bronze", "#B07F57", 14.8, 0.46, 3.26, 0.6, 0.9, 0.7), 1.8), 0.88)],
     background: 0, spots: [1, 2, 3, 4], paperPct: 0.5, white: 5, gold: 6 },
   { key: "peacock19", name: "19th-c. Peacock: periwinkle, crimson, gold, green, cream", source: "dp 144", streak: [81.3, 0.201, 78.6, 0.15], paper: "#E3D3B4",
-    pigments: [B("maroon", "#945D68", 10.5, 0.96, 0.55), F("grey", "#787BA1", 48.2, 4.1, 3.31, 0.4, 0.95, 0.6), F("green", "#788157", 6.5, 2.1, 1.13, 0.69, 0.92, 0.6), F("crimson", "#901125", 5.7, 0.5, 1.57, 0.61, 0.95, 0.5), F("gold", "#C19133", 8.1, 0.7, 1.7, 0.61, 1, 0.6), F("pink-white", "#ADA08E", 21.0, 2.3, 1.31, 0.59, 1, 0.4), WHITE],
+    pigments: [B("maroon", "#945D68", 10.5, 0.96, 0.55), F("grey", "#787BA1", 48.2, 4.1, 3.31, 0.4, 0.95, 0.6), F("green", "#788157", 6.5, 2.1, 1.16, 0.69, 0.92, 0.6), F("crimson", "#901125", 5.7, 0.5, 1.57, 0.61, 0.95, 0.5), F("gold", "#C19133", 8.1, 0.7, 1.7, 0.61, 1, 0.6), F("pink-white", "#ADA08E", 21.0, 2.3, 1.31, 0.59, 1, 0.4), WHITE],
     background: 0, spots: [1, 2, 3, 4, 5], paperPct: 0.0, white: 6 },
   { key: "gloster19", name: "19th-c. Gloster: maroon, black, ochre, blue", source: "dp 65", streak: [86.1, 0.055, 90.3, 0.086], paper: "#E4D6BA",
-    pigments: [K(E(F("maroon", "#5C071A", 35.1, 0.93, 3.89, 0.6, 0.96, 0.55), 3.5), 0.69), K(E(F("black", "#432A41", 20.2, 1.86, 2.43, 0.44, 1, 0.4), 4.87), 0.82), K(E(F("ochre", "#C88957", 5.7, 0.6, 1.91, 0.45, 1, 0.6), 4.62), 0.9), K(E(F("blue", "#44518D", 34.9, 1.25, 0.15, 0.6, 0.92, 0.6), 1.79), 0.75), WHITE],
+    pigments: [K(E(F("maroon", "#5C071A", 35.1, 0.93, 36.09, 0.6, 0.96, 0.55), 3.5), 0.69), K(E(F("black", "#432A41", 20.2, 1.86, 2.99, 0.44, 1, 0.4), 4.87), 0.82), K(E(F("ochre", "#C88957", 5.7, 0.6, 1.91, 0.45, 1, 0.6), 4.62), 0.9), K(E(F("blue", "#44518D", 34.9, 1.25, 0.15, 0.6, 0.92, 0.6), 1.79), 0.75), WHITE],
     background: 0, spots: [1, 2, 3], paperPct: 4.0, white: 4 },
   { key: "gloster18", name: "18th-c. Gloster: dark teal, pink-red, tan", source: "dp 330", streak: [100.5, 0.067, 94.2, 0.073], paper: "#DCC9A6",
     pigments: [{ ...P("dark teal", "#22403F", 0.96, 0.5, 1), frac: 60.9 }, K(E(F("pink-red", "#9C513E", 13.6, 0.53, 2.26, 0.8, 0.95, 0.5), 2.46), 0.72), K(E(F("tan", "#A88363", 23.9, 1.38, 2.23, 0.8, 0.97, 0.6), 2.0), 0.8), WHITE],
     background: 0, spots: [1, 2], paperPct: 1.6, white: 3, laid: true },
   { key: "schrottel19", name: "19th-c. Schrottel: black, crimson, yellow, grey", source: "dp 76", streak: [48.2, 0.015, 80.3, 0.011], paper: "#E2D3B6",
-    pigments: [{ ...P("black", "#1B1816", 1, 0.45, 1), frac: 19.1 }, K(E(F("crimson", "#6F161A", 10.7, 0.7, 3.47, 0.7, 0.95, 0.5), 2.44), 0.85), K(E(F("yellow", "#B79A2D", 7.6, 0.4, 2.73, 0.7, 1, 0.6), 2.69), 0.87), K(E(F("grey", "#686554", 54.6, 1.68, 6.51, 0.7, 0.95, 0.65), 1.57), 0.75), WHITE],
+    pigments: [{ ...P("black", "#1B1816", 1, 0.45, 1), frac: 19.1 }, K(E(F("crimson", "#6F161A", 10.7, 0.7, 3.47, 0.7, 0.95, 0.5), 2.44), 0.85), K(E(F("yellow", "#B79A2D", 7.6, 0.4, 3.04, 0.7, 1, 0.6), 2.69), 0.87), K(E(F("grey", "#686554", 54.6, 1.68, 6.57, 0.7, 0.95, 0.65), 1.57), 0.75), WHITE],
     background: 0, spots: [1, 2, 3], paperPct: 8.0, white: 4 },
   { key: "antique19", name: "19th-c. Antique straight: red, blue, ochre, black, white", source: "dp 131", streak: [86.9, 0.538, 86.7, 0.436], paper: "#E7DABD",
     pigments: [B("red", "#991D21", 31.4, 0.96, 0.5), F("black", "#32283A", 16.0, 1.4, 2.3, 0.66, 1, 0.4), F("blue", "#112265", 6.5, 0.9, 1.53, 0.58, 0.92, 0.55), F("maroon", "#89413C", 22.3, 0.8, 2.23, 0.6, 0.96, 0.55), F("ochre", "#BF762E", 13.0, 1.2, 1.47, 0.64, 1, 0.6), F("white", "#D9BAA2", 9.5, 2.3, 1.32, 0.44, 0.97, 0.3)],
@@ -132,13 +132,13 @@ const PALETTES_RAW: Palette[] = [
     pigments: [K(E(F("dark olive", "#4A3F2E", 49.4, 0.71, 2.14, 0.6, 0.96, 0.5), 2.11), 0.65), K(E(F("pink-red", "#904E3B", 11.9, 0.61, 2.17, 0.64, 0.95, 0.5), 2.61), 0.74), K(E(F("tan", "#8F785C", 28.6, 1.29, 2.11, 0.61, 0.95, 0.5), 2.06), 0.74), K(E(F("peach", "#D5916C", 9.5, 0.41, 2.04, 0.62, 0.95, 0.5), 2.72), 0.67), WHITE],
     background: 0, spots: [1, 2, 3], paperPct: 0.6, white: 4, special: 2, laid: true },
   { key: "dp71", name: "19th-c. Gloster (dp 71): slate, black, umber, red, yellow, speckled grey", source: "dp 71", streak: [1.9, 0.12, 3.9, 0.174], paper: "#D6D4C8",
-    pigments: [K(E(F("slate", "#44585F", 20.2, 1.24, 1.73, 0.6, 0.96, 0.5), 3.25), 0.7), K(E(F("black", "#232528", 14.0, 0.54, 8.17, 0.62, 0.95, 0.5), 4.4), 0.69), K(E(F("umber", "#845946", 16.5, 1.42, 14.54, 0.41, 0.95, 0.5), 5.23), 0.76), K(E(F("red", "#AD3437", 14.4, 0.37, 2.61, 0.82, 0.95, 0.5), 3.22), 0.7), K(E(F("yellow", "#C5A244", 11.8, 0.23, 6.51, 0.94, 0.95, 0.5), 3.73), 0.86), K(E(F("grey", "#A5ADAA", 19.8, 1.52, 0.1, 0.5, 0.95, 0.5), 1.86), 0.77), WHITE],
+    pigments: [K(E(F("slate", "#44585F", 20.2, 1.24, 1.73, 0.6, 0.96, 0.5), 3.25), 0.7), K(E(F("black", "#232528", 14.0, 0.54, 4.92, 0.62, 0.95, 0.5), 4.4), 0.69), K(E(F("umber", "#845946", 16.5, 1.42, 3.83, 0.41, 0.95, 0.5), 5.23), 0.76), K(E(F("red", "#AD3437", 14.4, 0.37, 2.61, 0.82, 0.95, 0.5), 3.22), 0.7), K(E(F("yellow", "#C5A244", 11.8, 0.23, 5.3, 0.94, 0.95, 0.5), 3.73), 0.86), K(E(F("grey", "#A5ADAA", 19.8, 1.52, 0.42, 0.5, 0.95, 0.5), 1.86), 0.77), WHITE],
     background: 0, spots: [1, 2, 3, 4, 5], bg: { fill: 1, r: 1 }, paperPct: 3.2, white: 6, special: 5 },
   { key: "dp91", name: "19th-c. Gloster (dp 91): dark grey, black, red-brown, ochre, speckled grey, yellow", source: "dp 91", streak: [71.7, 0.107, 59.0, 0.155], paper: "#C9C4A2",
     pigments: [K(E(F("dark grey", "#585F50", 26.9, 0.51, 1.98, 0.6, 0.96, 0.5), 4.83), 0.66), K(E(F("black", "#3A3B38", 23.1, 2.6, 1.74, 0.45, 0.95, 0.5), 1.87), 0.81), K(E(F("red-brown", "#A64E36", 4.2, 0.21, 3.14, 0.71, 0.95, 0.5), 5.28), 1.03), K(E(F("ochre", "#8E6D4A", 5.5, 0.56, 1.69, 0.41, 0.95, 0.5), 6.39), 0.83), K(E(F("grey", "#9B997B", 33.2, 5.41, 1.7, 0.5, 0.95, 0.5), 2.05), 0.85), K(E(F("yellow", "#C7B965", 6.3, 0.31, 1.83, 0.7, 0.95, 0.5), 5.52), 0.66), WHITE],
     background: 0, spots: [1, 2, 3, 4, 5], bg: { fill: 0.79, r: 0.69 }, paperPct: 0.8, white: 6, special: 4 },
   { key: "dp105", name: "19th-c. Schrottel (dp 105): yellow-tan, black, dark brown, olive, ochre", source: "dp 105", streak: [176.6, 0.045, 164.2, 0.028], paper: "#E8DCC2",
-    pigments: [K(E(F("yellow-tan", "#D8B870", 65.6, 2.07, 2.47, 0.6, 0.96, 0.5), 1.52), 0.77), K(E(F("black", "#252C3B", 3.5, 0.78, 1.68, 0.26, 0.95, 0.5), 1.98), 1.08), K(F("dark brown", "#3C2602", 8.6, 1.02, 1.52, 0.24, 0.95, 0.5), 1.0), F("olive", "#7D6A3A", 6.9, 0.5, 2.78, 0.4, 0.95, 0.5), K(E(F("ochre", "#AF9251", 15.2, 0.92, 10.47, 0.5, 0.95, 0.5), 1.47), 0.81), WHITE],
+    pigments: [K(E(F("yellow-tan", "#D8B870", 65.6, 2.07, 2.47, 0.6, 0.96, 0.5), 1.52), 0.77), K(E(F("black", "#252C3B", 3.5, 0.78, 1.68, 0.26, 0.95, 0.5), 1.98), 1.08), K(F("dark brown", "#3C2602", 8.6, 1.02, 1.52, 0.24, 0.95, 0.5), 1.0), F("olive", "#7D6A3A", 6.9, 0.5, 2.78, 0.4, 0.95, 0.5), K(E(F("ochre", "#AF9251", 15.2, 0.92, 12.02, 0.5, 0.95, 0.5), 1.47), 0.81), WHITE],
     background: 0, spots: [1, 2, 3, 4], paperPct: 0.2, white: 5, special: 4 },
   { key: "dp111", name: "19th-c. Shell (dp 111): blue, grey-blue cells, pink", source: "dp 111", streak: [1.7, 0.01, 79.5, 0.015], paper: "#C9E0DC",
     pigments: [K(E(F("blue", "#16639A", 68.5, 2.1, 2.46, 0.6, 0.96, 0.5), 1.71), 0.72), K(E(F("grey-blue", "#62A1BE", 20.9, 2.67, 1.62, 0.4, 0.95, 0.5), 2.07), 0.86), K(E(F("pink", "#95929F", 6.8, 0.77, 2.04, 0.43, 0.95, 0.5), 2.36), 0.78), WHITE],
@@ -216,7 +216,7 @@ const PALETTES_RAW: Palette[] = [
     pigments: [B("crimson", "#7E000A", 61.4, 0.96, 0.5), F("red", "#922C2D", 11.8, 0.35, 0.68, 0.17, 0.95, 0.5), F("grey-blue", "#806773", 7.3, 0.45, 1.51, 0.59, 0.95, 0.5), F("tan", "#CD6A5D", 7.0, 0.5, 0.86, 0.21, 0.95, 0.5), F("orange", "#EF9755", 5.7, 0.63, 1.41, 0.5, 0.95, 0.5), F("pale pink", "#FFC6B2", 6.8, 1.12, 1.1, 0.44, 0.95, 0.5), WHITE],
     background: 0, spots: [1, 2, 3, 4, 5], paperPct: 0.0, white: 6 },
   { key: "dp87", name: "19th-c. Gloster on Serpentine (dp 87): red, indigo, dark grey, maroon, speckled grey, ochre", source: "dp 87", streak: [104.6, 0.121, 95.5, 0.126], paper: "#D9CBC6",
-    pigments: [B("red", "#801323", 35.6, 0.96, 0.5), F("indigo", "#37405B", 16.3, 0.7, 2.87, 0.72, 0.95, 0.5), F("dark grey", "#3E3D3A", 8.5, 0.62, 2.16, 0.69, 0.95, 0.5), F("maroon", "#6D2F33", 14.2, 1.65, 1.85, 0.4, 0.95, 0.5), F("grey", "#948D90", 15.7, 0.83, 2.4, 0.5, 0.95, 0.5), F("ochre", "#AC714A", 8.6, 0.41, 2.6, 0.68, 0.95, 0.5), WHITE],
+    pigments: [B("red", "#801323", 35.6, 0.96, 0.5), F("indigo", "#37405B", 16.3, 0.7, 2.87, 0.72, 0.95, 0.5), F("dark grey", "#3E3D3A", 8.5, 0.62, 2.16, 0.69, 0.95, 0.5), F("maroon", "#6D2F33", 14.2, 1.65, 0.43, 0.4, 0.95, 0.5), F("grey", "#948D90", 15.7, 0.83, 2.4, 0.5, 0.95, 0.5), F("ochre", "#AC714A", 8.6, 0.41, 0.69, 0.68, 0.95, 0.5), WHITE],
     background: 0, spots: [1, 2, 3, 4, 5], paperPct: 1.1, white: 6, special: 4 },
   { key: "guyot20", name: "20th-c. Guyot Shell: orange, green, cream", source: "dp 524", streak: [83.4, 0.038, 63.8, 0.093], paper: "#EEE7D8",
     pigments: [P("orange", "#E0602A", 0.96, 0.5), S("green", "#3F8E62", 0.6, 4.0, 0.8, 0.95, 0.55), S("cream", "#EAD9B8", 0.5, 6.0, 0.8, 1, 0.4), WHITE],
@@ -749,7 +749,7 @@ export const RECIPES: Recipe[] = [
       // closed cells, each nonpareil column fanning out into a bouquet and pinching to a stem; the cells of adjacent
       // column pairs stagger half a wavelength (lattice (74, 0), (37, 63) on dp 172). Arc kernel: the nonpareil rows bend
       // into rounded concentric arcs inside each cell.
-      b.wavyComb(-90, 74, 18.5, 74, { alternate: true, ripple: 0.8, plateau: 12 }); // period ≈ 4 × amplitude (dp 174): the cells come out squarish; dragged sharply (user): the nonpareil rows deform strongly into the fans // plateau: the tongues ride into the fan whole; the stretch sits in the stems (dp 172)
+      b.wavyComb(-90, 74, 18.5, 74, { alternate: true, ripple: 0.45, plateau: 6 }); // period ≈ 4 × amplitude (dp 174): the cells come out squarish // plateau: the tongues ride into the fan whole; the stretch sits in the stems (dp 172)
       return b.drift().scene(); } },
 
   { name: "Peacock", streaks: "v", group: "Combed", palette: "peacock19", palettes: ["peacock19"], terms: ["peacock", "augen"], defaults: { ...D19, ...COMBED_LOOK, viscosity: 0.3 }, note: "Turkish, a one-row comb drawn down and back then across and back, halving, then a two-row comb drawn down in a loose wave: eyes outlined by hair lines with the stone spots inside (Miura; dp 144).",
@@ -765,7 +765,7 @@ export const RECIPES: Recipe[] = [
       // closed eyes ~44 mm wide at the widest, in staggered rows (dp 144: 43.8 mm across, 54–57 mm rows, 114 mm red
       // period). The arc profile draws the paint along each path into the hair lines that outline the eye, while the
       // rounded middle of the gap only bends, so the blobs inside survive (a log wake shears the whole gap and shreds them).
-      b.wavyComb(-90, 44, 11, 112, { alternate: true, ripple: 1.0, plateau: 12, shape: "triangle" }); // triangular waves a half period apart, dragged sharply: the two rows of straight zigzag lines cross into diamonds ~44 mm wide and 56 mm tall (dp 144); no fine comb, the base is Turkish (user)
+      b.wavyComb(-90, 44, 11, 112, { alternate: true, ripple: 0.5, plateau: 6, shape: "triangle" }); // triangular waves a half period apart: the two rows of straight zigzag lines cross into diamonds ~44 mm wide and 56 mm tall (dp 144); no fine comb, the base is Turkish (user)
       return b.drift().scene(); } },
 
   { name: "Serpentine", streaks: "h", group: "Combed", palette: "dp164", palettes: ["dp164", "serpentine19", "dp87"], terms: ["serpentine", "waved", "wave"], defaults: { ...D19, ...COMBED_LOOK, viscosity: 0.3 }, note: "Turkish, a one-row comb drawn down and back then across and back, halving, then a slightly wider comb drawn once down the sheet in wavy lines like a snake's track (Miura; dp 69, 164).",
@@ -884,12 +884,13 @@ export const RECIPES: Recipe[] = [
       // The shot mixture: plain rounded discs on a jittered ~15 mm lattice (dp 76: 0.43 per cm², nearest-neighbour CV 0.29,
       // Clark–Evans 1.4), median 8.5 mm, p90 16 mm, up to 30 mm. Where the jitter brings neighbours together they merge into
       // loose agglomerations of 2–6 discs; elsewhere 1–4 mm of black shows. No rim halo, no eyes of their own.
-      // Fuzzy edges (the gall-and-oil mixture spreads into the film, see the scans), and the eyes ride on the discs as
-      // features of them, since they form by reaction with the mixture (user): heavy-tailed cores (median 0.5 mm, 1 % over
-      // 1.9 mm, max 4.5 mm) of the ground seen through the opened film, in paper halos of outer diameter 0.55 mm + 2 ×
-      // core; a fine lattice (~2.5 per cm²) and a sparse one of large eyes (4–9 mm halos). The Christaller look is the
-      // size hierarchy, not regular spacing of the big ones.
-      b.sprinkleStats(shot, { perCm2: 0.43, d50: 8.2, sig: 0.5, wk: 1.8 }, { jitter: 0.46, anim: 0.8, style: STYLE.SOFT | STYLE.EYES, styleParam: 0.4 });
+      b.sprinkleStats(shot, { perCm2: 0.43, d50: 8.2, sig: 0.5, wk: 1.8 }, { jitter: 0.46, anim: 0.8 });
+      // The eyes are the gall-and-oil shower itself, Poisson at every size (Clark–Evans ≈ 1.0): heavy-tailed cores (median
+      // 0.5 mm, 1 % over 1.9 mm, max 4.5 mm) in a paper halo of outer diameter 0.55 mm + 2 × core. Two thinned lattices:
+      // fine (2.5 per cm², halos 1.1–5 mm) and coarse (0.08 per cm² of cores ≥ 1.5 mm with 4–9 mm halos). The Christaller
+      // look is the size hierarchy, not regular spacing of the big ones.
+      b.sprinkle([ground], { cell: 3.3, r: 0.235, fill: 0.28, jitter: 0.5, shape: 1.0, floorMm: 1.1, style: STYLE.EYE, styleParam: 0.42, small: true, gapFill: 0, anim: 1.2 });
+      b.sprinkle([ground], { cell: 24, r: 0.094, fill: 0.22, jitter: 0.5, shape: 1.2, floorMm: 3.5, style: STYLE.EYE, styleParam: 0.42, gapFill: 0, anim: 1.0 });
       return b.drift().scene(); } },
 
   { name: "Shell", group: "Dispersant", palette: "shell19", palettes: ["shell19", "dp111", "dp118", "dp137", "dp61", "guyot20"], terms: ["shell", "oil"], defaults: { ...D19 }, note: "Final dominant colour mixed with oil: white outline, darker centre.",

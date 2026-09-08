@@ -36,7 +36,6 @@ export const STYLE = {
   BROKEN: 512, // caustic fracture (Romantic)
   GALLDOTS: 1024, // sparse small clear "gall spots" inside later colours
   EYE: 2048, // dispersant droplet: a core of the drop's colour inside a ring cleared to the paper; styleParam = core radius / drop radius (Schrottel)
-  EYES: 4096, // a shower of dispersant eyes riding on this drop: dark cores of the ground colour in paper halos, sized heavy-tailed, moving with the drop (Schrottel)
 } as const;
 
 export function packOps(forwardOps: Op[]): { data: Float32Array; count: number } {
