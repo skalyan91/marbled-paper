@@ -424,7 +424,7 @@ function calibrateColours(scene: Scene, palette: Palette) {
   const targets = palette.pigments.slice(0, 16).map((pg) => hexToRgb(pg.hex).map((v) => v * 255));   // hexToRgb is 0..1
   const comp = targets.map((t) => [...t] as [number, number, number]);
   const setComp = () => palette.pigments.slice(0, 16).forEach((_, i) => colourComp.set(i, comp[i].map((v) => v / 255) as [number, number, number]));
-  for (let it = 0; it < 2; it++) {
+  for (let it = 0; it < 1; it++) {
     setComp();
     uploadScene(flat, palette);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, canvas.width, canvas.height);
@@ -432,6 +432,8 @@ function calibrateColours(scene: Scene, palette: Palette) {
     gl.uniform1i(uni.uDebug, 0); drawMain(1, 0); gl.readPixels(0, 0, w, hh, gl.RGBA, gl.UNSIGNED_BYTE, fin);
     const acc = new Map<number, number[]>();
     for (let i = 0; i < w * hh; i++) {
+      const x = i % w, y = (i - x) / w;
+      if (x < w * 0.2 || x > w * 0.8 || y < hh * 0.2 || y > hh * 0.8) continue;   // inside the vignette
       const idx = Math.round((ids[i * 4] / 255) * 32) - 1;
       if (idx < 0 || idx >= 16) continue;
       let a = acc.get(idx); if (!a) { a = [0, 0, 0, 0]; acc.set(idx, a); }
@@ -441,7 +443,9 @@ function calibrateColours(scene: Scene, palette: Palette) {
     for (const [idx, a] of acc) {
       if (a[3] < 400) continue;
       log[palette.pigments[idx].name] = { n: a[3], mean: [a[0] / a[3], a[1] / a[3], a[2] / a[3]].map(Math.round), comp: comp[idx].map(Math.round) };
-      for (let k = 0; k < 3; k++) comp[idx][k] = Math.max(0, Math.min(255, comp[idx][k] + (targets[idx][k] - a[k] / a[3])));
+      // Half the difference only: the mean of a mottled film sits below what the eye reads as its colour (the clean
+      // parts of a drop), and matching the mean exactly made the reds garish (user).
+      for (let k = 0; k < 3; k++) comp[idx][k] = Math.max(0, Math.min(255, comp[idx][k] + 0.5 * (targets[idx][k] - a[k] / a[3])));
     }
     calibLog.push(log);
   }
