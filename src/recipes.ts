@@ -655,10 +655,16 @@ const zebraBase = (b: Builder, round: number[]) => {
  *  (arches 8–10 mm apart, bands 2–4 mm wide, dp 393 and 75), with spots to match. */
 const nonpareilBase = (b: Builder, fine = 2.4) => {
   const coarse = fine / 2.4;
-  b.turkish({ cell: 14 * Math.sqrt(coarse), ...COMBED, sizeMul: COMBED.sizeMul * Math.sqrt(coarse), shape: coarse > 1.5 ? 2.5 : undefined });   // the sheets' fitted sizes assume the measured (heavy-tailed) shapes
-  b.comb2(0, 22 * Math.sqrt(coarse), { ripple: 2.2 }); // get-gel: a wide comb drawn twice, halving (the log wake here softened the bands to mush)
-  b.jog(0);   // the bands jog sideways irregularly before the fine comb; the tongues stay regular (dp 284)
-  b.comb(-90, fine, { ripple: 1.6 }); // fine comb drawn vertically once: a chain of rounded tongues with cusps between (dp 82)
+  // Spots several times the measured fragments, of one size and sparse (a fourteenth of the measured density), so
+  // that drawn out by the get-gel they are bands 5–10 mm wide and each scallop of the fine comb holds one colour
+  // (dp 82). Every sheet on this base was refitted with these sizes.
+  b.turkish({ cell: 16 * Math.sqrt(coarse), sizeMul: 6 * Math.sqrt(coarse), densityMul: 0.07, gallDots: false, shape: 2.5 });
+  // get-gel: a wide comb drawn twice, halving, with the wake kernel and a 5 mm core: each band moves almost rigidly,
+  // drawn long yet still wide. The arc profile here either shears the bands to threads (hard pull) or shows its own
+  // arches (gentle pull).
+  b.comb2(0, 22 * Math.sqrt(coarse), { ripple: 2.2, L: 5, kernel: "wake" });
+  b.jog(0);   // the bands jog sideways irregularly before the fine comb; the scallops stay regular (dp 284)
+  b.comb(-90, fine, { ripple: 1.6 }); // fine comb drawn once across the bands: scallops along every band edge (dp 82)
   return b;
 };
 
