@@ -800,12 +800,13 @@ export const RECIPES: Recipe[] = [
   { name: "French curl on Nonpareil", group: "Curled", palette: "dp21", palettes: ["dp21", "frenchcurl19b"], terms: ["french curl on nonpareil"], defaults: { ...D19, ...COMBED_LOOK, curlStrength: 1 }, note: "Nonpareil base, then swirled.",
     build: (p, pal) => { const b = nonpareilBase(new Builder(p, pal)); b.vortexGrid(105, { z: 1.0 * 6.2832 * 8, r: 25, core: 8, L: 8 + 30 * p.viscosity, alt: 0 }); /* dp 21: about one turn at an 8 mm core, the winding falling off as 1/d (the rows deflected, not wound, beyond ~25 mm), wound regions 70–80 mm across, ~100 mm apart, all the same sense */ return b.drift().scene(); } },
 
-  { name: "Placard (Drawn stone)", group: "Curled", palette: "placard18", palettes: ["placard18"], terms: ["placard", "drawn stone", "mixed"], defaults: { ...D18, curlStrength: 1 }, note: "Red thrown generously, gall on it, a handful of huge slate, blue and ochre drops, gall again, then a stylus drawn freely across the bath in sweeps and hooks: Schleicher's Drawn stone (dp 96–98, 102).",
+  { name: "Placard (Drawn stone)", group: "Curled", palette: "placard18", palettes: ["placard18"], terms: ["placard", "drawn stone", "mixed"], defaults: { ...D18, curlStrength: 1, tooth: 0.45, granulation: 0.35, wear: 0.06 }, note: "Red thrown generously, gall on it, a handful of huge slate, blue and ochre drops, gall again, then a stylus drawn freely across the bath in sweeps and hooks: Schleicher's Drawn stone (dp 96–98, 102).",
     build: (p, pal) => {
       const b = new Builder(p, pal);
       const h = (i: number) => hash01(p.seed, 900 + i);
-      // 1. Red ground as a film, no bath swirl, no fine dots (dp 97: a third of the sheet stays red).
-      b.turkish({ spots: 0, swirl: 0, gallDots: false });
+      // 1. Red ground as a continuous film (the sheets' red is unbroken between the drops; the bare paper is the spots
+      //    thrown into it, not gaps in the throw), no bath swirl, no fine dots (dp 97: a third of the sheet stays red).
+      b.turkish({ spots: 0, swirl: 0, gallDots: false, bgFill: 1 });
       // 2. Gall on the red, in two populations (dp 97 at 600 dpi): large ovals 6–15 mm, about one per 4 cm², and fine
       //    dots 2–4 mm, 1.5 per cm². Both are bare paper.
       b.sprinkleStats(-1, { perCm2: 0.12, d50: 7, sig: 0.5, wk: 1.2 }, { style: STYLE.CLEAR, anim: 1 });
