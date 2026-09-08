@@ -445,7 +445,7 @@ function calibrateColours(scene: Scene, palette: Palette) {
       log[palette.pigments[idx].name] = { n: a[3], mean: [a[0] / a[3], a[1] / a[3], a[2] / a[3]].map(Math.round), comp: comp[idx].map(Math.round) };
       // Half the difference only: the mean of a mottled film sits below what the eye reads as its colour (the clean
       // parts of a drop), and matching the mean exactly made the reds garish (user).
-      for (let k = 0; k < 3; k++) comp[idx][k] = Math.max(0, Math.min(255, comp[idx][k] + 0.5 * (targets[idx][k] - a[k] / a[3])));
+      for (let k = 0; k < 3; k++) comp[idx][k] = Math.max(0, Math.min(255, comp[idx][k] + 0.7 * (targets[idx][k] - a[k] / a[3])));
     }
     calibLog.push(log);
   }
