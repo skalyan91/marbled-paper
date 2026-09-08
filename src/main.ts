@@ -1,7 +1,7 @@
 import fragSrc from "./shaders/marble.frag?raw";
 import vertSrc from "./shaders/fullscreen.vert?raw";
 import interleaveSrc from "./shaders/interleave.frag?raw";
-import { MAX_OPS as OPS_PER_CHAIN, FLOATS_PER_OP, packOps } from "./ops";
+import { MAX_OPS as OPS_PER_CHAIN, FLOATS_PER_OP, packOps, OP } from "./ops";
 import { LayerBank, MAX_LAYERS } from "./layers";
 import { RECIPES, PALETTES, Builder, type Params, type Scene, type Palette } from "./recipes";
 import { makeGui, DEBUG_MODES, palettesFor, bestRecipeFor, type Settings } from "./gui";
@@ -377,7 +377,7 @@ function uploadScene(scene: Scene, palette: Palette) {
   // palette
   const pal = new Float32Array(32 * 4);
   palette.pigments.slice(0, 16).forEach((pg, i) => {
-    const [r, g, b] = hexToRgb(pg.hex);
+    const [r, g, b] = colourComp.get(i) ?? hexToRgb(pg.hex);
     pal.set([r, g, b, 1], i * 4);
     pal.set([pg.opacity ?? 1, pg.grain ?? 0.5, pg.metallic ?? 0, 0], 64 + i * 4);
   });
@@ -402,11 +402,60 @@ function uploadScene(scene: Scene, palette: Palette) {
 }
 
 let customScene: { scene: Scene; pal: Palette } | null = null;
+// ------------------------------------------------ colour pre-compensation
+// The paper's tooth, the granulation, the wear, the wet-edge tint and the film's own translucency all pull a rendered
+// colour towards the paper and towards mid-grey, so a palette colour measured on a sheet comes out duller than it was
+// measured (user: "precompensate for the loss of saturation from the paper texture"). Before drawing, each pigment's
+// uploaded colour is corrected so that the *mean rendered colour of its undeformed drops* equals the measured hex:
+// the layers are drawn without the combs and curls (a hair line's blend with its neighbours is the pattern, not the
+// texture), the per-colour means are read back, and the difference is added to the uploaded colour, twice.
+const colourComp = new Map<number, [number, number, number]>();
+const calibLog: unknown[] = [];
+let compKey = "";
+function compKeyOf(scene: Scene, palette: Palette) {
+  return [settings.pattern, palette.key, settings.tooth, settings.granulation, settings.wear, settings.grain, settings.paperAge, settings.bleed, settings.edgeDark, settings.gall, settings.stretchLimit, scene.groundFill].join("|");
+}
+function calibrateColours(scene: Scene, palette: Palette) {
+  colourComp.clear();
+  const flat = { ...scene, ops: scene.ops.filter((o) => o.type === OP.SPRINKLE || o.type === OP.SHEAR) };
+  const w = Math.min(canvas.width, 1200), hh = Math.min(canvas.height, 800);
+  const ids = new Uint8Array(w * hh * 4), fin = new Uint8Array(w * hh * 4);
+  const prevDebug = settings.debug, prevInter = phaseK;
+  const targets = palette.pigments.slice(0, 16).map((pg) => hexToRgb(pg.hex).map((v) => v * 255));   // hexToRgb is 0..1
+  const comp = targets.map((t) => [...t] as [number, number, number]);
+  const setComp = () => palette.pigments.slice(0, 16).forEach((_, i) => colourComp.set(i, comp[i].map((v) => v / 255) as [number, number, number]));
+  for (let it = 0; it < 2; it++) {
+    setComp();
+    uploadScene(flat, palette);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, canvas.width, canvas.height);
+    gl.uniform1i(uni.uDebug, 7); drawMain(1, 0); gl.readPixels(0, 0, w, hh, gl.RGBA, gl.UNSIGNED_BYTE, ids);
+    gl.uniform1i(uni.uDebug, 0); drawMain(1, 0); gl.readPixels(0, 0, w, hh, gl.RGBA, gl.UNSIGNED_BYTE, fin);
+    const acc = new Map<number, number[]>();
+    for (let i = 0; i < w * hh; i++) {
+      const idx = Math.round((ids[i * 4] / 255) * 32) - 1;
+      if (idx < 0 || idx >= 16) continue;
+      let a = acc.get(idx); if (!a) { a = [0, 0, 0, 0]; acc.set(idx, a); }
+      a[0] += fin[i * 4]; a[1] += fin[i * 4 + 1]; a[2] += fin[i * 4 + 2]; a[3]++;
+    }
+    const log: Record<string, unknown> = {};
+    for (const [idx, a] of acc) {
+      if (a[3] < 400) continue;
+      log[palette.pigments[idx].name] = { n: a[3], mean: [a[0] / a[3], a[1] / a[3], a[2] / a[3]].map(Math.round), comp: comp[idx].map(Math.round) };
+      for (let k = 0; k < 3; k++) comp[idx][k] = Math.max(0, Math.min(255, comp[idx][k] + (targets[idx][k] - a[k] / a[3])));
+    }
+    calibLog.push(log);
+  }
+  setComp();
+  settings.debug = prevDebug; void prevInter;
+  gl.uniform1i(uni.uDebug, DEBUG_MODES.indexOf(settings.debug));
+}
 function rebuildScene() {
   if (customScene) { uploadScene(customScene.scene, customScene.pal); return; }
   const recipe = RECIPES.find((r) => r.name === settings.pattern) ?? RECIPES[0];
   paletteObj = PALETTES.find((p) => p.short === settings.palette || p.name === settings.palette) ?? PALETTES.find((p) => p.key === recipe.palette) ?? PALETTES[0];
   const scene = recipe.build({ ...currentParams(), streaks: recipe.streaks, streakScale: recipe.streakScale }, paletteObj);
+  const key = compKeyOf(scene, paletteObj);
+  if (key !== compKey) { compKey = key; calibrateColours(scene, paletteObj); }
   uploadScene(scene, paletteObj);
   if (url.searchParams.get("pattern") !== settings.pattern || url.searchParams.get("seed") !== String(settings.seed)) {
     url.searchParams.set("pattern", settings.pattern);
@@ -697,6 +746,7 @@ function fitRecipe(name: string, iters = 8, paletteKey?: string) {
   PALETTES,
   showScene(scene: Scene | null, pal: Palette) { customScene = scene ? { scene, pal } : null; paletteObj = pal; markDirty(); },
   params: currentParams,
+  calibrate() { compKey = ""; calibLog.length = 0; rebuildScene(); return { comp: Object.fromEntries(colourComp), log: calibLog }; },
   RECIPES,
   layers,
   /** Upload an arbitrary scene (built with marble.Builder) and measure its coverage. */

@@ -195,6 +195,13 @@ measured on the scans: ≈1.2–1.5 spacings for fine combs, 2–6 for the get-g
 - The op chain holds 36 operators per pattern (72 in the uniform buffer with the under-pattern
   of a double marble); a recipe that overflows it warns in the console, because the shader
   keeps the first operators and would silently drop the last passes.
+- Colours are pre-compensated for the paper. The tooth, the granulation, the cover wear, the
+  wet-edge tint and the film's translucency all pull a rendered colour towards the paper and
+  towards mid-grey, so a colour measured on a sheet came out duller than measured. On every
+  change of pattern, sheet or texture setting the layers are drawn once without the combs and
+  curls, the mean rendered colour of each pigment's drops is read back, and the uploaded colour
+  is corrected until that mean equals the measured hex (two passes). What a hair line blends
+  into at the pixel is the pattern, not the texture, and is left alone.
 - Spot sizes follow a shifted Weibull (1.2 mm floor) with a per-colour shape fitted on the
   scans; Weibull beat log-normal, gamma, exponential and Pareto by AIC across 43 colours.
 

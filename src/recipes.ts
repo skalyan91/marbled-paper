@@ -363,9 +363,9 @@ export class Builder {
   }
 
   /** Sprinkle by measured statistics: spots per cm², median diameter (mm), log-normal spread. */
-  sprinkleStats(colour: number, st: { perCm2: number; d50: number; sig: number; wk?: number }, o: { style?: number; styleParam?: number; anim?: number; densityMul?: number; sizeMul?: number; wobble?: number; jitter?: number } = {}) {
+  sprinkleStats(colour: number, st: { perCm2: number; d50: number; sig: number; wk?: number }, o: { style?: number; styleParam?: number; anim?: number; densityMul?: number; sizeMul?: number; wobble?: number; jitter?: number; minDens?: number } = {}) {
     const dens = st.perCm2 * (o.densityMul ?? 1);
-    const cellMm = 10 / Math.sqrt(Math.max(0.006, dens));   // down to one drop per 1.7 dm² (Placard's few huge drops); 0.05 crowded them onto a 45 mm lattice and buried the first colours
+    const cellMm = 10 / Math.sqrt(Math.max(o.minDens ?? 0.05, dens));   // the 0.05 floor is part of every fitted sheet's regime; Placard's few huge drops pass minDens 0.006
     const r = (st.d50 * 1.35 * (o.sizeMul ?? 1)) / 2 / cellMm; // ×1.35: scan components are fragmented by later colours; clamped ≤ 0.8 cell in the bake
     const pk = this.pal.pack ?? {};
     const rr = r / (0.55 + 0.45 * this.p.gall);
@@ -823,7 +823,7 @@ export const RECIPES: Recipe[] = [
       const thinned = (c: number) => dh(hueOf(c), hueOf(gnd)) < 30 && luma(pal.pigments[c].hex) > luma(pal.pigments[gnd].hex) + 0.08;
       const yellowish = (c: number) => dh(hueOf(c), 60) < 40 && luma(pal.pigments[c].hex) > 0.45;
       const bigs = pal.spots.filter((c) => !thinned(c)).sort((x, y) => (yellowish(x) ? 1 : 0) - (yellowish(y) ? 1 : 0) || (pal.pigments[y].frac ?? 0) - (pal.pigments[x].frac ?? 0)).slice(0, 3);
-      bigs.forEach((c) => { ensureStats(pal, c, 20, 0.02); b.sprinkleStats(c, { ...b.statsOf(c), perCm2: 0.02, sig: 0.3, wk: 1 }, { anim: 0.4, jitter: 0.45 }); });
+      bigs.forEach((c) => { ensureStats(pal, c, 20, 0.02); b.sprinkleStats(c, { ...b.statsOf(c), perCm2: 0.02, sig: 0.3, wk: 1 }, { anim: 0.4, jitter: 0.45, minDens: 0.006 }); });
       // 4. Gall last: fine clear spots inside the drops, 2 per cm², d50 2.5 mm, a few to 8 mm.
       b.sprinkleStats(-1, { perCm2: 0.8, d50: 2.5, sig: 0.6, wk: 1.3 }, { style: STYLE.CLEAR, anim: 1.2 });
       // 5. The stylus. Five free sweeps 40–90 mm long with a wake 6–9 mm wide draw the drops into 50–60 mm teardrops (the
