@@ -836,7 +836,7 @@ export const RECIPES: Recipe[] = [
       //    Its curls are hooks (dp 97 at 600 dpi): the same sweep bent through half to three-quarters of a turn on a radius
       //    of 12–20 mm, the paint dragged along the arc with the sweep's wake, not a disc wound into rings. One to three
       //    per sheet, 65–95 mm apart, all turning the same way. An arc is a chain of short strokes.
-      const n = 1 + Math.floor(h(50) * 3), sgn = h(51) < 0.5 ? 1 : -1;
+      const n = 1 + Math.floor(h(50) * 2), sgn = h(51) < 0.5 ? 1 : -1;   // one or two per sheet width (three overflowed the op chain)
       for (let i = 0; i < n; i++) {
         const cx = (h(70 + i) - 0.5) * p.sheetW * 0.7, cy = (h(80 + i) - 0.5) * p.sheetH * 0.8;
         const R = (15 + 10 * h(90 + i)) * p.curlStrength, a0 = h(100 + i) * 2 * Math.PI, sweep = sgn * Math.PI * (1.1 + 0.6 * h(110 + i));

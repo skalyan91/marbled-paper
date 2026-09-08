@@ -83,7 +83,7 @@ const settings: Settings = {
   },
 };
 if (!RECIPES.some((r) => r.name === settings.pattern)) settings.pattern = RECIPES[0].name;
-settings.palette = palettesFor(settings.pattern)[0].short!;
+settings.palette = defaultSheet(settings.pattern);
 
 // --------------------------------------------------------------- shaders
 let program: WebGLProgram | null = null;
@@ -501,16 +501,22 @@ applyDefaults(settings.pattern);
 lastPattern = settings.pattern;
 const gui = makeGui(settings, markDirty, () => {
   const r = RECIPES.find((x) => x.name === settings.pattern);
-  if (r && !palettesFor(r.name).some((p) => p.short === settings.palette)) settings.palette = palettesFor(r.name)[0].short!;
+  if (r && !palettesFor(r.name).some((p) => p.short === settings.palette)) settings.palette = defaultSheet(r.name);
   if (r && lastPattern !== r.name) { applyDefaults(r.name); lastPattern = r.name; gui.controllersRecursive().forEach((c) => c.updateDisplay()); }
   buildProgram();
   markDirty();
 });
+/** The sheet a pattern opens on: the curated sheet its recipe was tuned against, else the first in the menu. */
+function defaultSheet(name: string): string {
+  const r = RECIPES.find((x) => x.name === name);
+  const sheets = palettesFor(name);
+  return (sheets.find((p) => r && p.key === r.palette) ?? sheets[0]).short!;
+}
 function selectPattern(name: string) {
   const r = RECIPES.find((x) => x.name === name);
   if (!r) return false;
   settings.pattern = r.name;
-  settings.palette = palettesFor(r.name)[0].short!;
+  settings.palette = defaultSheet(r.name);
   applyDefaults(r.name);
   lastPattern = r.name;
   (gui as unknown as { refreshPalettes: () => void }).refreshPalettes();
