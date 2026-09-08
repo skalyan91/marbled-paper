@@ -69,7 +69,7 @@ const PALETTES_RAW: Palette[] = [
     pigments: [K(E(F("red", "#C24542", 30.0, 0.2, 2.49, 0.6, 0.95, 0.5), 4.0), 0.63), K(F("dark blue", "#55434A", 2.8, 0.18, 1.73, 0.8, 0.95, 0.5), 0.6), K(E(F("slate", "#6A726D", 34.2, 0.11, 8.29, 1.0, 0.95, 0.55), 3.37), 0.87), F("ochre", "#DAA852", 5.9, 0.4, 2.33, 0.8, 1, 0.6), WHITE],
     background: 0, spots: [1, 2, 3], pack: { jitter: 0.26, sigma: 0.45 }, bg: { fill: 0.81, r: 0.56 }, paperPct: 27.1, white: 4, laid: true },
   { key: "serpentine19", name: "19th-c. Serpentine on Turkish: red, olive, blue, orange, cream", source: "dp 396", streak: [69.6, 0.15, 66.0, 0.128], paper: "#E4D3B0",
-    pigments: [B("red", "#C73841", 51.0, 0.95, 0.5), F("indigo", "#684E8B", 9.6, 1.2, 1.76, 0.5, 0.9, 0.55), F("olive", "#997C57", 9.8, 1.7, 1.42, 0.54, 0.92, 0.6), F("orange", "#E87E64", 12.2, 3.1, 0.51, 0.38, 0.95, 0.5), F("cream", "#FDB492", 16.2, 2.0, 1.19, 0.45, 1, 0.4), WHITE],
+    pigments: [B("red", "#C73841", 51.0, 0.95, 0.5), F("indigo", "#684E8B", 9.6, 1.2, 1.76, 0.5, 0.9, 0.55), F("olive", "#997C57", 9.8, 1.7, 1.42, 0.54, 0.92, 0.6), F("orange", "#E87E64", 12.2, 3.1, 0.55, 0.38, 0.95, 0.5), F("cream", "#FDB492", 16.2, 2.0, 1.19, 0.45, 1, 0.4), WHITE],
     background: 0, spots: [1, 2, 3, 4], paperPct: 1.2, white: 5 },
   { key: "spanish19", name: "19th-c. Spanish on Turkish: crimson, yellow, teal, umber", source: "dp 165", streak: [103.8, 0.062, 60.0, 0.035], paper: "#DCCBAA",
     pigments: [K(E(F("crimson", "#B35245", 6.1, 0.2, 0.94, 0.6, 0.95, 0.5), 3.14), 0.79), K(E(F("yellow", "#B68E37", 7.0, 0.24, 2.81, 0.75, 1, 0.6), 3.89), 0.82), K(E(F("dark teal", "#394237", 23.3, 0.24, 4.43, 0.9, 0.96, 0.5), 2.79), 0.75), K(E(F("umber", "#69412E", 29.0, 0.39, 4.31, 1.0, 0.96, 0.6), 2.38), 0.6), WHITE],
@@ -112,7 +112,7 @@ const PALETTES_RAW: Palette[] = [
     pigments: [B("maroon", "#670007", 37.0, 0.96, 0.5), F("purple", "#651F57", 10.2, 0.65, 2.6, 0.58, 0.95, 0.5), F("slate", "#644036", 18.8, 0.63, 2.8, 0.68, 0.95, 0.5), F("red-brown", "#95403A", 18.8, 0.68, 2.17, 0.33, 0.95, 0.5), F("pink", "#C98977", 15.2, 1.58, 1.38, 0.51, 0.95, 0.5), WHITE],
     background: 0, spots: [1, 2, 3, 4], paperPct: 0.0, white: 5 },
   { key: "dp164", name: "19th-c. Serpentine (dp 164): maroon, black, purple, umber, orange, pink", source: "dp 164", streak: [172.0, 0.302, 177.7, 0.253], paper: "#E4D4B8",
-    pigments: [B("maroon", "#530002", 59.9, 0.96, 0.5), F("black", "#24060B", 6.5, 0.83, 0.34, 0.48, 0.95, 0.5), F("purple", "#6C3B71", 7.7, 0.89, 1.35, 0.52, 0.95, 0.5), F("umber", "#833137", 12.6, 2.0, 1.13, 0.3, 0.95, 0.5), F("orange", "#B44E13", 3.8, 0.48, 1.28, 0.53, 0.95, 0.5), F("pink", "#D89A97", 9.4, 1.15, 1.16, 0.49, 0.95, 0.5), WHITE],
+    pigments: [B("maroon", "#530002", 59.9, 0.96, 0.5), F("black", "#24060B", 6.5, 0.83, 0.47, 0.48, 0.95, 0.5), F("purple", "#6C3B71", 7.7, 0.89, 1.35, 0.52, 0.95, 0.5), F("umber", "#833137", 12.6, 2.0, 1.13, 0.3, 0.95, 0.5), F("orange", "#B44E13", 3.8, 0.48, 1.28, 0.53, 0.95, 0.5), F("pink", "#D89A97", 9.4, 1.15, 1.16, 0.49, 0.95, 0.5), WHITE],
     background: 0, spots: [1, 2, 3, 4, 5], paperPct: 0.0, white: 6 },
   { key: "dp156", name: "19th-c. French curl on Fountain (dp 156): red, black, teal, maroon, grey-blue, pink, yellow", source: "dp 156", streak: [164.7, 0.166, 167.4, 0.115], paper: "#E4D4B8",
     pigments: [B("red", "#79000E", 25.6, 0.96, 0.5), F("black", "#453D42", 14.4, 0.86, 2.98, 0.62, 0.95, 0.5), F("dark teal", "#244D5F", 15.4, 0.69, 2.4, 0.76, 0.95, 0.5), F("maroon", "#70282F", 13.4, 1.56, 1.39, 0.37, 0.95, 0.5), F("grey-blue", "#677E98", 18.8, 0.62, 2.61, 0.88, 0.95, 0.5), F("pink", "#A7725B", 5.9, 0.35, 1.63, 0.32, 0.95, 0.5), F("yellow", "#B49397", 3.4, 0.47, 1.02, 0.61, 0.95, 0.5), WHITE],
@@ -211,10 +211,10 @@ const PALETTES_RAW: Palette[] = [
     pigments: [B("red", "#AD3149", 21.7, 0.96, 0.5), F("indigo", "#3E3C70", 8.1, 0.98, 2.48, 0.53, 0.95, 0.5), F("dark teal", "#374144", 5.9, 0.91, 1.65, 0.49, 0.95, 0.5), F("maroon", "#7E4F5A", 35.9, 2.57, 2.91, 0.43, 0.95, 0.5), F("orange", "#BA6154", 11.8, 0.98, 1.6, 0.54, 0.95, 0.5), F("cream", "#DAA995", 16.6, 1.66, 1.32, 0.46, 0.95, 0.5), WHITE],
     background: 0, spots: [1, 2, 3, 4, 5], paperPct: 0.0, white: 6 },
   { key: "dp75", name: "19th-c. Double comb waved (dp 75): crimson, red, grey-blue, tan, orange, pale pink", source: "dp 75", streak: [73.2, 0.214, 59.4, 0.074], paper: "#E4D4B8",
-    pigments: [B("crimson", "#7E000A", 61.4, 0.96, 0.5), F("red", "#922C2D", 11.8, 0.35, 0.61, 0.17, 0.95, 0.5), F("grey-blue", "#806773", 7.3, 0.45, 1.51, 0.59, 0.95, 0.5), F("tan", "#CD6A5D", 7.0, 0.5, 0.69, 0.21, 0.95, 0.5), F("orange", "#EF9755", 5.7, 0.63, 1.41, 0.5, 0.95, 0.5), F("pale pink", "#FFC6B2", 6.8, 1.12, 1.1, 0.44, 0.95, 0.5), WHITE],
+    pigments: [B("crimson", "#7E000A", 61.4, 0.96, 0.5), F("red", "#922C2D", 11.8, 0.35, 0.42, 0.17, 0.95, 0.5), F("grey-blue", "#806773", 7.3, 0.45, 1.51, 0.59, 0.95, 0.5), F("tan", "#CD6A5D", 7.0, 0.5, 0.43, 0.21, 0.95, 0.5), F("orange", "#EF9755", 5.7, 0.63, 1.41, 0.5, 0.95, 0.5), F("pale pink", "#FFC6B2", 6.8, 1.12, 1.1, 0.44, 0.95, 0.5), WHITE],
     background: 0, spots: [1, 2, 3, 4, 5], paperPct: 0.0, white: 6 },
   { key: "dp87", name: "19th-c. Gloster on Serpentine (dp 87): red, indigo, dark grey, maroon, speckled grey, ochre", source: "dp 87", streak: [104.6, 0.121, 95.5, 0.126], paper: "#D9CBC6",
-    pigments: [B("red", "#801323", 35.6, 0.96, 0.5), F("indigo", "#37405B", 16.3, 0.7, 2.87, 0.72, 0.95, 0.5), F("dark grey", "#3E3D3A", 8.5, 0.62, 2.16, 0.69, 0.95, 0.5), F("maroon", "#6D2F33", 14.2, 1.65, 0.64, 0.4, 0.95, 0.5), F("grey", "#948D90", 15.7, 0.83, 2.4, 0.5, 0.95, 0.5), F("ochre", "#AC714A", 8.6, 0.41, 0.52, 0.68, 0.95, 0.5), WHITE],
+    pigments: [B("red", "#801323", 35.6, 0.96, 0.5), F("indigo", "#37405B", 16.3, 0.7, 2.87, 0.72, 0.95, 0.5), F("dark grey", "#3E3D3A", 8.5, 0.62, 2.16, 0.69, 0.95, 0.5), F("maroon", "#6D2F33", 14.2, 1.65, 0.6, 0.4, 0.95, 0.5), F("grey", "#948D90", 15.7, 0.83, 2.4, 0.5, 0.95, 0.5), F("ochre", "#AC714A", 8.6, 0.41, 0.63, 0.68, 0.95, 0.5), WHITE],
     background: 0, spots: [1, 2, 3, 4, 5], paperPct: 1.1, white: 6, special: 4 },
   { key: "guyot20", name: "20th-c. Guyot Shell: orange, green, cream", source: "dp 524", streak: [83.4, 0.038, 63.8, 0.093], paper: "#EEE7D8",
     pigments: [P("orange", "#E0602A", 0.96, 0.5), S("green", "#3F8E62", 0.6, 4.0, 0.8, 0.95, 0.55), S("cream", "#EAD9B8", 0.5, 6.0, 0.8, 1, 0.4), WHITE],
@@ -668,7 +668,7 @@ const zebraBase = (b: Builder, round: number[]) => {
 /** Nonpareil base: a stone base, the get-gel (a wide comb drawn twice, halving), then a fine comb drawn once
  *  across it. `fine` is the fine comb's spacing: ~4 mm on dp 82; the double combs sit on a coarser nonpareil
  *  (arches 8–10 mm apart, dp 393 and 75), with spots to match. */
-const nonpareilBase = (b: Builder, fine = 4, o: { dir?: number; ripple?: number; bold?: number; plateau?: number; beforeFine?: (b: Builder) => void } = {}) => {
+const nonpareilBase = (b: Builder, fine = 4, o: { dir?: number; ripple?: number; bold?: number; plateau?: number; beforeFine?: (b: Builder) => void; skipFine?: boolean } = {}) => {
   const coarse = fine / 4;
   const dir = o.dir ?? -90;   // direction the fine comb moves; the get-gel is drawn at right angles to it
   const bold = o.bold ?? 1;   // fewer, larger drops at the same coverage: bands `bold` times wider after the get-gel
@@ -681,7 +681,8 @@ const nonpareilBase = (b: Builder, fine = 4, o: { dir?: number; ripple?: number;
   // arches (gentle pull).
   b.comb2(dir + 90, 22 * Math.sqrt(coarse), { ripple: 2.2, L: 5, kernel: "wake" });
   b.jog(dir + 90);   // the bands jog sideways irregularly before the fine comb; the scallops stay regular (dp 284)
-  o.beforeFine?.(b);  // a pass on the get-gel bands before the fine comb cuts them (Double comb waved: the waved wide comb)
+  o.beforeFine?.(b);  // a pass on the get-gel bands before the fine comb cuts them
+  if (o.skipFine) return b;  // the caller draws its own last comb (Double comb waved: along a wave)
   b.comb(dir, fine, { ripple: o.ripple ?? 2.2, plateau: o.plateau }); // fine comb drawn once across the bands: scallops along every band edge, taller than wide (dp 82: ~4.5 mm tongues)
   return b;
 };
@@ -732,7 +733,7 @@ export const RECIPES: Recipe[] = [
          reversing every half wave. Tongues that lean with the wave were cut by the comb that was drawn along it: the last comb is
          the 10 mm one, drawn down the sheet along a wave of ±15 mm over ~95 mm and pulled hard, over a nonpareil of a finer comb
          (Wolfe: a nonpareil, then a comb with wider teeth drawn once more in a wavy line). dp 471 (Guyot) is finer, ~5 mm tongues. */
-      const b = nonpareilBase(new Builder(p, pal), 5, { bold: 2.5, plateau: 12 });
+      const b = nonpareilBase(new Builder(p, pal), 10, { bold: 3, skipFine: true }); // get-gel bands 3–5 mm (dp 75) and nothing finer: the sheet shows no subdivision inside the tongues
       b.wavyComb(-90, 10, 15, 95, { alternate: false, ripple: 3, plateau: 12 });
       return b.drift().scene(); } },
 
@@ -765,7 +766,7 @@ export const RECIPES: Recipe[] = [
       return b.drift().scene(); } },
 
   { name: "Serpentine", streaks: "h", group: "Combed", palette: "dp164", palettes: ["dp164", "serpentine19", "dp87"], terms: ["serpentine", "waved", "wave"], defaults: { ...D19, ...COMBED_LOOK, viscosity: 0.3 }, note: "Turkish, a one-row comb drawn down and back then across and back, halving, then a slightly wider comb drawn once down the sheet in wavy lines like a snake's track (Miura; dp 69, 164).",
-    build: (p, pal) => { const b = new Builder(p, pal); turkishBase(b, 7, { densityMul: 0.5 }); // ~0.3 drops per cm² of every colour, ~10 mm each: bold bands in every hairpin, no single-colour fields // bands 1–6 mm on the sheet from a get-gel drawn twice and a waved comb: drops thrown ~10–20 mm and many of them, so every hairpin of dp 69 carries every colour (the plain 2.5/stretch² density left one ochre drop per palm)
+    build: (p, pal) => { const b = new Builder(p, pal); turkishBase(b, 7, { densityMul: 0.25 }); // ~0.15 drops per cm² of every colour, ~10 mm each (the fitter sets the size for the coverage): bands 3–5 mm, the whites the widest, every hairpin carrying every colour, no single-colour fields // bands 1–6 mm on the sheet from a get-gel drawn twice and a waved comb: drops thrown ~10–20 mm and many of them, so every hairpin of dp 69 carries every colour (the plain 2.5/stretch² density left one ochre drop per palm)
       // Lengths below are from dp 69 scaled to its catalogued 15 cm width (the scan is ~455 dpi, not 300).
       b.comb2(-90, 16, { ripple: 0.3 }); // get-gel down and back up: 8 mm vertical bands, the hairline stacks inside every later band; it survives only faintly on dp 69, so a gentler pull than the second
       b.comb2(0, 16, { ripple: 1.0, plateau: 6 }); // get-gel across, halving: the small nested tongues (16 mm, solid interiors) that every hairpin of dp 69 carries; a moderate pull keeps the bands 2–6 mm (white 3–6 mm on the sheet)
