@@ -134,20 +134,23 @@ measured on the scans: ≈1.2–1.5 spacings for fine combs, 2–6 for the get-g
   drag. Two interleaved tine sets in opposite phase give the staggered fans; the fan shape is
   set by the drag regime (small drag → closed scallops; larger drag → connected S-waves),
   verified with a forward-model sweep.
-- Every pattern the catalogue describes as made "on a Turkish base" starts from the same call
-  as the plain Turkish (Stone) sheet (rings, gall dots, residual swirl), with the throw inflated
-  by the stretch the later combing measured on the sheet, since the drop statistics were taken
-  from the combed bands. Following Miura as quoted by the catalogue: Peacock is Turkish, a
-  one-row comb drawn down and back then across and back, halving, and a two-row comb drawn down
-  in a loose wave (44 mm sets, 112 mm wavelength, dp 144); Bouquet is the same final comb on a
-  Nonpareil (74 mm sets, 126 mm wavelength, dp 172); Serpentine is the double get-gel and one
-  wider comb pulled hard down the sheet with a small swing (21 mm tines, 33 mm hairpins,
-  dp 69); Double comb is an ordinary Nonpareil (4.5 mm) plus one lightly pulled 26 mm comb
-  with the wake kernel, so the columns are separated by hair-line zones at the tine paths and
-  the arches between them open against the pull (dp 393); Fountain is a 10 mm comb drawn
-  across and back, then (on every UW sheet) stylus swirls ~165 mm apart (dp 156, 272); Placard
-  is Schleicher's Drawn stone: a red film with paper patches, a few very large drops, gall
-  water, free stylus sweeps and loose twirls (dp 96–98, 102).
+- Patterns the catalogue describes as made "on a Turkish base" start from the Turkish (Stone)
+  structure (a generous ground, spots in order, rings, gall dots, residual swirl), but every
+  parameter is deduced from the finished sheet: the palette's measured spot statistics,
+  inflated by the stretch the later combing gave the bands, and the coverage fitter drives
+  each colour's size. Following Miura as quoted by the catalogue: Peacock is Turkish, a
+  one-row comb drawn down and back then across and back, halving, and a two-row comb drawn
+  down in a wave (44 mm sets, 112 mm wavelength, dp 144); Bouquet is the same final comb on a
+  Nonpareil (74 mm sets, 126 mm wavelength, dp 172). In both the two rows of teeth are half a
+  period out of phase and the wave's amplitude is half the separation of adjacent lines, so
+  neighbouring lines touch once a wavelength and quilt the sheet into closed cells: the
+  bouquets and the eyes. Serpentine is the double get-gel and one 21 mm comb drawn down the
+  sheet along a 14 mm swing (dp 69, 164). Double comb is an ordinary Nonpareil (4.5 mm) plus
+  one lightly pulled 26 mm comb drawn the same way with the same arc profile, so the big tongue
+  heads point with the small ones and the hair-line cusps between them bound the columns
+  (dp 393). Fountain is a 10 mm comb drawn across and back, then (on every UW sheet) stylus
+  swirls ~165 mm apart (dp 156, 272). Placard is Schleicher's Drawn stone: a red film, the
+  sheet's own few large drops, gall water, free stylus sweeps and loose twirls (dp 96–98, 102).
 - Spot sizes follow a shifted Weibull (1.2 mm floor) with a per-colour shape fitted on the
   scans; Weibull beat log-normal, gamma, exponential and Pareto by AIC across 43 colours.
 
