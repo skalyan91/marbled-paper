@@ -147,11 +147,16 @@ measured on the scans: ≈1.2–1.5 spacings for fine combs, 2–6 for the get-g
   Nonpareil (74 mm sets, 126 mm wavelength, dp 172). In both the two rows of teeth are half a
   period out of phase and the wave's amplitude is half the separation of adjacent lines, so
   neighbouring lines touch once a wavelength and quilt the sheet into closed cells: the
-  bouquets and the eyes. Serpentine is the double get-gel and one 21 mm comb drawn down the
-  sheet along a 14 mm swing (dp 69, 164). Double comb is an ordinary Nonpareil (4.5 mm) plus
-  one 26 mm comb drawn the same way with the same arc profile and pulled hard (1.2 spacings),
-  so the big tongue heads point with the small ones and run past a column width, and the
-  cusps between the columns draw out into the hair-line rows of dp 393. Fountain is a 10 mm comb drawn across and back, then (on every UW sheet) stylus
+  bouquets and the eyes. Serpentine is the double get-gel (its second, halving pass leaves the
+  small nested tongues every hairpin carries) and one 21 mm comb drawn down the sheet along a
+  14 mm swing (dp 69, 164). Double comb is authored in dp 393's own frame: the get-gel drawn
+  down the sheet, then a 4.5 mm comb and a 26 mm comb both moving left across the bands and
+  both pulled hard (3 and 1.5 spacings), so every tongue, small and large, points left.
+- Hard-pulled combs use a plateau tongue profile, 1 − |2f|^3 across each tine's gap, instead of
+  the |cos|^0.6 arc: the paint inside a tongue moves almost rigidly with its tine and all the
+  stretching sits in a narrow zone at each cusp, so long small tongues keep their colour whole
+  (dp 393, 172). Combed recipes also take lighter paper texture (tooth, granulation, wear),
+  since at the full stone-sheet amounts the 0.2–1 mm texture turns 4 mm tongues to mud. Fountain is a 10 mm comb drawn across and back, then (on every UW sheet) stylus
   swirls ~165 mm apart (dp 156, 272). Placard is Schleicher's Drawn stone: a red film, the
   sheet's own few large drops, gall water, free stylus sweeps and loose twirls (dp 96–98, 102).
 - The op chain holds 36 operators per pattern (72 in the uniform buffer with the under-pattern
