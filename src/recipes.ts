@@ -378,7 +378,7 @@ export class Builder {
     const wake = o.kernel === "wake";
     // train sum as evaluated in the shader, for normalisation: a chain of arcs, or (1 + (d/L)²)^-1/2 per tine over the nine nearest tines
     const K = (u: number) => -0.5 * Math.log(1 + u * u);
-    const arc = (f: number) => Math.abs(Math.cos(Math.PI * f));
+    const arc = (f: number) => Math.pow(Math.max(Math.abs(Math.cos(Math.PI * f)), 1e-3), 0.6);
     const sum = (f: number) => { if (!wake) return arc(f); const k = Math.round(f); let t = 0; for (let j = -4; j <= 4; j++) t += K(((f - k - j) * s) / L); return t; };
     let mean = 0; for (let i = 0; i < 64; i++) mean += sum((i + 0.5) / 64); mean /= 64;
     const ripple = (o.ripple ?? 1.2) * (o.strength ?? 1) * p.combStrength;
@@ -651,10 +651,10 @@ const zebraBase = (b: Builder, round: number[]) => {
   return pale;
 };
 /** Nonpareil base: a stone base, the get-gel (a wide comb drawn twice, halving), then a fine comb drawn once
- *  across it. `fine` is the fine comb's spacing: 2.4 mm on dp 82; the double combs sit on a coarser nonpareil
- *  (arches 8–10 mm apart, bands 2–4 mm wide, dp 393 and 75), with spots to match. */
-const nonpareilBase = (b: Builder, fine = 2.4) => {
-  const coarse = fine / 2.4;
+ *  across it. `fine` is the fine comb's spacing: ~4 mm on dp 82; the double combs sit on a coarser nonpareil
+ *  (arches 8–10 mm apart, dp 393 and 75), with spots to match. */
+const nonpareilBase = (b: Builder, fine = 4) => {
+  const coarse = fine / 4;
   // Spots several times the measured fragments, of one size and sparse (a fourteenth of the measured density), so
   // that drawn out by the get-gel they are bands 5–10 mm wide and each scallop of the fine comb holds one colour
   // (dp 82). Every sheet on this base was refitted with these sizes.
@@ -664,7 +664,7 @@ const nonpareilBase = (b: Builder, fine = 2.4) => {
   // arches (gentle pull).
   b.comb2(0, 22 * Math.sqrt(coarse), { ripple: 2.2, L: 5, kernel: "wake" });
   b.jog(0);   // the bands jog sideways irregularly before the fine comb; the scallops stay regular (dp 284)
-  b.comb(-90, fine, { ripple: 1.6 }); // fine comb drawn once across the bands: scallops along every band edge (dp 82)
+  b.comb(-90, fine, { ripple: 2.2 }); // fine comb drawn once across the bands: scallops along every band edge, taller than wide (dp 82: ~4.5 mm tongues)
   return b;
 };
 

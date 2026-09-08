@@ -66,7 +66,7 @@ const settings: Settings = {
   edgeDark: 0.12,
   tooth: 0.6,
   granulation: 0.6,
-  wear: 0.35,
+  wear: 0.15,
   transferAmp: 1.0,
   debug: DEBUG_MODES[0],
   savePng: () => savePng(),
@@ -488,7 +488,7 @@ function savePng() {
 }
 
 // ----------------------------------------------------------------- init
-const BASE_DEFAULTS = { viscosity: 0.35, gall: 1, density: 1, combScale: 1, combStrength: 1, curlStrength: 1, transferAmp: 1, paperAge: 0.35, bleed: 0.12, edgeDark: 0.12, grain: 0.7, tooth: 0.6, granulation: 0.6, wear: 0.35, drift: 1.2, breath: 0.12, stretchLimit: 60, gapFill: 0.7 };
+const BASE_DEFAULTS = { viscosity: 0.35, gall: 1, density: 1, combScale: 1, combStrength: 1, curlStrength: 1, transferAmp: 1, paperAge: 0.35, bleed: 0.12, edgeDark: 0.12, grain: 0.7, tooth: 0.6, granulation: 0.6, wear: 0.15, drift: 1.2, breath: 0.12, stretchLimit: 60, gapFill: 0.7 };
 function applyDefaults(name: string) {
   const r = RECIPES.find((x) => x.name === name);
   if (!r) return;

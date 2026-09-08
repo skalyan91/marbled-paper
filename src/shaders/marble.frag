@@ -315,10 +315,13 @@ void invComb(inout Trace t, vec4 a, vec4 b, vec4 c) {
   float n = dot(t.S, N) - a.w;
   float sum = 0.0, dsum = 0.0;
   if (b.z < 0.5) {
+    // |cos|^0.6: flatter tongue tops and narrower cusp zones than the plain cosine, so the film is stretched thin
+    // only in a thin line at each mid-gap (dp 82: crisp tongue interiors, hair-thin cusps)
     float ph = 3.14159265 * n / s;               // 0 at a tine, ±π/2 at the mid-gaps
     float cs = cos(ph);
-    sum = abs(cs);
-    dsum = -3.14159265 / s * sin(ph) * sign(cs);
+    float ac = max(abs(cs), 1e-3);
+    sum = pow(ac, 0.6);
+    dsum = -0.6 * pow(ac, -0.4) * 3.14159265 / s * sin(ph) * sign(cs);
   } else {
     float kn = floor(n / s + 0.5);
     for (int j = -4; j <= 4; j++) {
@@ -655,7 +658,7 @@ Shaded shadePattern(Hit h, vec2 P, vec3 paper, float lodScr, float tooth, int gf
   cov *= transferShade(P, lodScr);
   // pigment piles up slightly at the gall front (drop outline)
   float rimPx = min(0.3 * uPxPerMm, 3.0);
-  if (uTransfer2.w < 0.5) base *= 1.0 - 0.12 * (1.0 - smoothstep(0.0, rimPx, h.ePx));
+  if (uTransfer2.w < 0.5) base *= 1.0 - 0.06 * (1.0 - smoothstep(0.0, rimPx, h.ePx));
   s.rgb = base;
   s.cov = clamp(cov, 0.0, 1.0);
   return s;
