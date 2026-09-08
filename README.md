@@ -27,7 +27,7 @@ URL parameters: `?pattern=Nonpareil&seed=1234`.
 
 39 patterns, following the pattern names of the UW collection: Turkish (Stone), Italian
 (hair vein), Gold vein, Nonpareil, Wide comb (Arch), Double comb, Bouquet, Peacock, Serpentine,
-Fountain, French curl on Turkish and on Nonpareil, Placard, Antique straight, Zebra, Gloster
+French curl on Fountain, on Turkish and on Nonpareil, Placard, Antique straight, Zebra, Gloster
 (Partridge eye), Schrottel, Shell, Stormont, Tiger, Dahlia, Spanish, Spanish moiré, Extra
 (Drag), Polnisch, Fantasy, Romantic (Broken), Morris (wet paper), Double marble, two overprinted
 gold veins, Italian overprinted on Turkish, Papier croisé, tourniquet and coulé, and three
@@ -122,8 +122,9 @@ measured on the scans: ≈1.2–1.5 spacings for fine combs, 2–6 for the get-g
 - Feather is a comb of a few millimetres pulled hard (continuous bands 1–5 mm wide) followed
   by a comb with widely set teeth drawn across them and back, halving, and pulled the length of
   the bath with the wake kernel: straight columns of near-parallel lines at the quills, opposite
-  sigmoids between (dp 29). The drawn base never animates; only the dots or drops thrown after
-  the combing move. Antique straight is a Feather followed by a shower of
+  sigmoids between (dp 29). The quills never move: the combs of a drawn base are laid still
+  (no tine drift, no wavy-path phase), while the colours keep sliding and breathing along the
+  fixed comb paths, as do the dots or drops thrown after the combing. Antique straight is a Feather followed by a shower of
   fine dots (dp 125, 131); Zebra is the same hard-pulled wide comb on a plain stone base, then
   one or more colours splashed on as large drops that sit on the bands (dp 15, 386). In all
   three the colours whose spots stayed round on the sheet (measured elongation below 2.2) are
@@ -133,6 +134,20 @@ measured on the scans: ≈1.2–1.5 spacings for fine combs, 2–6 for the get-g
   drag. Two interleaved tine sets in opposite phase give the staggered fans; the fan shape is
   set by the drag regime (small drag → closed scallops; larger drag → connected S-waves),
   verified with a forward-model sweep.
+- Every pattern the catalogue describes as made "on a Turkish base" starts from the same call
+  as the plain Turkish (Stone) sheet (rings, gall dots, residual swirl), with the throw inflated
+  by the stretch the later combing measured on the sheet, since the drop statistics were taken
+  from the combed bands. Following Miura as quoted by the catalogue: Peacock is Turkish, a
+  one-row comb drawn down and back then across and back, halving, and a two-row comb drawn down
+  in a loose wave (44 mm sets, 112 mm wavelength, dp 144); Bouquet is the same final comb on a
+  Nonpareil (74 mm sets, 126 mm wavelength, dp 172); Serpentine is the double get-gel and one
+  wider comb pulled hard down the sheet with a small swing (21 mm tines, 33 mm hairpins,
+  dp 69); Double comb is an ordinary Nonpareil (4.5 mm) plus one lightly pulled 26 mm comb
+  with the wake kernel, so the columns are separated by hair-line zones at the tine paths and
+  the arches between them open against the pull (dp 393); Fountain is a 10 mm comb drawn
+  across and back, then (on every UW sheet) stylus swirls ~165 mm apart (dp 156, 272); Placard
+  is Schleicher's Drawn stone: a red film with paper patches, a few very large drops, gall
+  water, free stylus sweeps and loose twirls (dp 96–98, 102).
 - Spot sizes follow a shifted Weibull (1.2 mm floor) with a per-colour shape fitted on the
   scans; Weibull beat log-normal, gamma, exponential and Pareto by AIC across 43 colours.
 
