@@ -623,9 +623,11 @@ float styleCoverage(Hit h, inout vec3 colr, float lodMat, float sig) {
   }
   if ((st & 256) != 0) { // SOFT: wet-paper edge
     float n = tnoise(h.S * 0.03 + hr.xy, lodFor(lodMat, 0.03)).g - 0.5;
-    cov *= 1.0 - smoothstep(0.55, 1.0, ul + 0.5 * p * n);
+    float st0 = 0.55 - 0.35 * clamp(p - 1.0, 0.0, 1.0);   // p > 1: a wash on wet paper (Morris), fading from a quarter of the radius out
+    cov *= 1.0 - smoothstep(st0, 1.0, ul + 0.5 * p * n);
+    cov *= mix(1.0, 0.55, clamp(p - 1.0, 0.0, 1.0));   // a wash is dilute: the paper shows through it (dp 280)
     colr = mix(colr, colr * 1.25 + 0.05, 0.35 * (1.0 - ul));
-    colr *= 1.0 - 0.15 * smoothstep(0.6, 0.95, ul + 0.3 * n);
+    colr *= 1.0 - 0.15 * smoothstep(0.6, 0.95, ul + 0.3 * n) * clamp(2.0 - p, 0.0, 1.0);   // the darker rim only on a coated paper, not on a wash
   }
   if ((st & 512) != 0) { // BROKEN: caustic fissures
     vec2 w = worley(h.S * 0.28 + hr.xy * 3.0, h.layer + 41);
@@ -698,8 +700,12 @@ Shaded shadePattern(Hit h, vec2 P, vec3 paper, float lodScr, float tooth, int gf
       s.rgb = col[gf].rgb * (0.96 + 0.08 * (tnoise(h.S * 0.05, lodFor(lodScr, 0.05)).g - 0.5));
       float gsig = stretchOf(h.J);
       float gfilm = pow(clamp(uDry.y / gsig, 0.0, 1.0), 0.35);
-      s.cov = pig[gf].x * mix(0.75 + 0.25 * tooth, 1.0, gfilm * 0.6) * transferShade(P, lodScr);
-      s.cov *= (1.0 - uPaperTex.z * 0.4 * (0.5 - tooth)) * (1.0 - uSurface.x * smoothstep(0.78, 0.92, tooth));   // same take-up and wear as a drop
+      // A thrown film is opaque: on the scans the paper shows only in gaps, never through the colour (dp 370's red
+      // rendered 8 L lighter and 20 chroma duller than the sheet with 4–14 % paper mixed in). The fibre relief
+      // modulates the film's density (darker where it pools), and only the wear rubs it bare.
+      s.cov = pig[gf].x * mix(0.96 + 0.04 * tooth, 1.0, gfilm * 0.6) * transferShade(P, lodScr);
+      s.cov *= (1.0 - uPaperTex.z * 0.08 * (0.5 - tooth)) * (1.0 - uSurface.x * smoothstep(0.78, 0.92, tooth));
+      s.rgb *= 1.0 - uPaperTex.z * 0.18 * (tooth - 0.5);
       s.stretch = gsig;
     }
     return s;
@@ -715,9 +721,11 @@ Shaded shadePattern(Hit h, vec2 P, vec3 paper, float lodScr, float tooth, int gf
   float gB = tnoise(h.S * 0.12, lodFor(lodMat, 0.12)).a;
   float g = 0.6 * gA + 0.4 * gB;
   float grain = uDry.x * pg.y;
-  float cov = pg.x * clamp(0.85 + 0.15 * film + (g - 0.5) * grain * (1.0 - film) * 0.6, 0.0, 1.0);
-  // absorption into the sheet: the film takes unevenly on the fibre relief (stretch-independent)
-  cov *= 1.0 - uPaperTex.z * 0.4 * (0.5 - tooth);
+  float cov = pg.x * clamp(0.95 + 0.05 * film + (g - 0.5) * grain * (1.0 - film) * 0.3, 0.0, 1.0);
+  // absorption into the sheet: the film takes unevenly on the fibre relief (stretch-independent). Mostly a density
+  // modulation (darker where it pools), only a little bare paper: see the ground film above.
+  cov *= 1.0 - uPaperTex.z * 0.08 * (0.5 - tooth);
+  base *= 1.0 - uPaperTex.z * 0.18 * (tooth - 0.5);
   // wear: on a handled cover the raised fibres rub bare, pale specks on every colour
   cov *= 1.0 - uSurface.x * smoothstep(0.78, 0.92, tooth);
   // granulation: heavy pigments settle in the hollows (darker), pale ones stay even
@@ -751,7 +759,7 @@ Shaded shadeChain(Trace t, vec2 P, vec3 paper, float lodScr, float tooth, int gf
   for (int k = 0; k + 1 < MAXH; k++) {
     if (t.ws[k] <= 0.0 || t.ws[k + 1] <= 0.0) continue;
     if (t.hs[k].layer == t.hs[k + 1].layer && t.hs[k].color == t.hs[k + 1].color) continue;   // the same wet paint: drops merge without a seam
-    float meet = 4.0 * t.ws[k] * t.ws[k + 1] * ps[k].cov * ps[k + 1].cov;
+    float meet = 2.0 * t.ws[k] * t.ws[k + 1] * ps[k].cov * ps[k + 1].cov;   // halved: marbling colours barely mingle where they meet, and the old blend pinked every red beside a cream (dp 75, 82)
     vec3 mixed = sqrt(max(ps[k].rgb * ps[k + 1].rgb, 0.0));
     ps[k].rgb = mix(ps[k].rgb, mixed, 0.5 * meet) * (1.0 - uBleed.z * meet);
     ps[k + 1].rgb = mix(ps[k + 1].rgb, mixed, 0.5 * meet) * (1.0 - uBleed.z * meet);
@@ -767,11 +775,10 @@ Shaded shadeChain(Trace t, vec2 P, vec3 paper, float lodScr, float tooth, int gf
 }
 
 vec3 goldNet(vec2 P, vec3 c, float amp, float lodScr) {
-  vec2 w1 = worley(P * 0.085 + 0.2, 901);
-  vec2 w2 = worley(P * 0.21 + 0.7, 902);
-  float e1 = 1.0 - smoothstep(0.04, 0.10, w1.y - w1.x);
-  float e2 = 1.0 - smoothstep(0.03, 0.08, w2.y - w2.x);
-  float net = clamp(e1 + 0.6 * e2, 0.0, 1.0) * amp;
+  // One coarse net (dp 139/273: cells 15–30 mm, veins 1–2 mm wide, no finer mesh inside them), lightly wandering.
+  vec2 w1 = worley(P * 0.045 + 0.2, 901);
+  float e1 = 1.0 - smoothstep(0.025, 0.06, w1.y - w1.x);
+  float net = e1 * amp;
   float sp = tnoise(P * 0.8, lodFor(lodScr, 0.8)).r;
   vec3 gold = mix(vec3(0.72, 0.56, 0.22), vec3(0.95, 0.82, 0.45), smoothstep(0.4, 0.9, sp));
   return mix(c, gold, net * 0.92);

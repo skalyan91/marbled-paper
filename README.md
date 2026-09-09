@@ -259,6 +259,15 @@ whose first colour was a full film but which show bare paper in cells get gall w
 last, sized to open that fraction. The pseudo-marbles (papier tourniquet, croisé, coulé) are
 `coated`: thin or soft paint shows the coating colour, never bare paper.
 
+Colours are matched on screen, not only in the palette. A thrown film is opaque (the paper
+shows in gaps, never through the colour; the fibre relief modulates the film's density
+instead), and before a sheet is drawn each colour is rendered flat, the median pixel of its
+area is read back, and the uploaded colour is shifted so that median meets the palette
+colour (the "Colour matching" control, 1 = fully). The median, not the mean: a mixture
+component's centre is the typical pixel of that colour on the scan, and matching the mean of
+a mottled film overshot. Checked on dp 370: the red film's median on screen is now within
+three units of the scan's.
+
 The measurement scripts (harvest, mixture-model analysis, palette generation, baking) are not
 part of this repository because they operate on the collection's images.
 

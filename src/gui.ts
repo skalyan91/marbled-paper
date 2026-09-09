@@ -31,6 +31,7 @@ export interface Settings {
   tooth: number;
   granulation: number;
   wear: number; // rubbed cover fibres
+  colourMatch: number; // 0–1: how far each colour is shifted so its median rendered pixel meets the palette colour
   transferAmp: number;
   debug: string;
   savePng: () => void;
@@ -211,6 +212,7 @@ export function makeGui(s: Settings, onChange: () => void, onRebuild: () => void
   dry.add(s, "tooth", 0, 1, 0.01).name("Paper tooth").onChange(onChange);
   dry.add(s, "granulation", 0, 1, 0.01).name("Granulation").onChange(onChange);
   dry.add(s, "wear", 0, 1, 0.01).name("Wear (cover rubbing)").onChange(onChange);
+  dry.add(s, "colourMatch", 0, 1, 0.05).name("Colour matching").onChange(onRebuild);   // how far each colour is pushed so its typical rendered pixel meets the palette colour
   dry.add(s, "bleed", 0, 0.6, 0.01).name("Edge bleed (mm)").onChange(onChange);
   dry.add(s, "edgeWobble", 0, 1.5, 0.01).name("Edge feathering").onChange(onChange);
   dry.add(s, "edgeDark", 0, 0.4, 0.01).name("Edge darkening").onChange(onChange);

@@ -67,6 +67,7 @@ const settings: Settings = {
   tooth: 0.6,
   granulation: 0.6,
   wear: 0.15,
+  colourMatch: 1,
   transferAmp: 1.0,
   debug: DEBUG_MODES[0],
   savePng: () => savePng(),
@@ -414,12 +415,13 @@ const colourComp = new Map<number, [number, number, number]>();
 const calibLog: unknown[] = [];
 let compKey = "";
 function compKeyOf(scene: Scene, palette: Palette) {
-  return [settings.pattern, palette.key, settings.tooth, settings.granulation, settings.wear, settings.grain, settings.paperAge, settings.bleed, settings.edgeDark, settings.gall, settings.stretchLimit, scene.groundFill].join("|");
+  return [settings.pattern, palette.key, settings.tooth, settings.granulation, settings.wear, settings.grain, settings.paperAge, settings.bleed, settings.edgeDark, settings.gall, settings.stretchLimit, settings.colourMatch, scene.groundFill].join("|");
 }
 function calibrateColours(scene: Scene, palette: Palette) {
   colourComp.clear();
   const flat = { ...scene, ops: scene.ops.filter((o) => o.type === OP.SPRINKLE || o.type === OP.SHEAR) };
   const w = Math.min(canvas.width, 1200), hh = Math.min(canvas.height, 800);
+  const x0 = Math.floor((canvas.width - w) / 2), y0 = Math.floor((canvas.height - hh) / 2);   // the centre of the canvas whatever its size (on a Retina canvas the corner sat in the vignette)
   const ids = new Uint8Array(w * hh * 4), fin = new Uint8Array(w * hh * 4);
   const prevDebug = settings.debug, prevInter = phaseK;
   const targets = palette.pigments.slice(0, 16).map((pg) => hexToRgb(pg.hex).map((v) => v * 255));   // hexToRgb is 0..1
@@ -428,25 +430,36 @@ function calibrateColours(scene: Scene, palette: Palette) {
   for (let it = 0; it < 1; it++) {
     setComp();
     uploadScene(flat, palette);
+    // The first calibration of a page ran before the frame loop had bound the layer textures, measured a picture of
+    // nothing and pushed the ground colour to a bright pink until the next rebuild: bind here, and set the frame
+    // uniforms the draw needs.
+    bindTextures();
+    gl.uniform2f(uni.uResolution, canvas.width, canvas.height);
+    gl.uniform1f(uni.uPxPerMm, canvas.width / sheetWidthMm());
     gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, canvas.width, canvas.height);
-    gl.uniform1i(uni.uDebug, 7); drawMain(1, 0); gl.readPixels(0, 0, w, hh, gl.RGBA, gl.UNSIGNED_BYTE, ids);
-    gl.uniform1i(uni.uDebug, 0); drawMain(1, 0); gl.readPixels(0, 0, w, hh, gl.RGBA, gl.UNSIGNED_BYTE, fin);
-    const acc = new Map<number, number[]>();
+    gl.uniform1i(uni.uDebug, 7); drawMain(1, 0); gl.readPixels(x0, y0, w, hh, gl.RGBA, gl.UNSIGNED_BYTE, ids);
+    gl.uniform1i(uni.uDebug, 0); drawMain(1, 0); gl.readPixels(x0, y0, w, hh, gl.RGBA, gl.UNSIGNED_BYTE, fin);
+    // Per colour, a histogram of each channel: the *median* pixel is matched to the palette colour, not the mean.
+    // The palette colour is a mixture component's centre, i.e. the typical pixel of that colour on the scan; the mean
+    // of a mottled film is pulled by its pale specks and dark pools, and matching it overshot (user: reds garish).
+    const hist = new Map<number, Uint32Array>();
     for (let i = 0; i < w * hh; i++) {
       const x = i % w, y = (i - x) / w;
       if (x < w * 0.2 || x > w * 0.8 || y < hh * 0.2 || y > hh * 0.8) continue;   // inside the vignette
       const idx = Math.round((ids[i * 4] / 255) * 32) - 1;
       if (idx < 0 || idx >= 16) continue;
-      let a = acc.get(idx); if (!a) { a = [0, 0, 0, 0]; acc.set(idx, a); }
-      a[0] += fin[i * 4]; a[1] += fin[i * 4 + 1]; a[2] += fin[i * 4 + 2]; a[3]++;
+      let hst = hist.get(idx); if (!hst) { hst = new Uint32Array(3 * 256 + 1); hist.set(idx, hst); }
+      hst[fin[i * 4]]++; hst[256 + fin[i * 4 + 1]]++; hst[512 + fin[i * 4 + 2]]++; hst[768]++;
     }
+    const median = (hst: Uint32Array, k: number) => { const n = hst[768]; let c = 0; for (let v = 0; v < 256; v++) { c += hst[k * 256 + v]; if (c * 2 >= n) return v; } return 255; };
     const log: Record<string, unknown> = {};
-    for (const [idx, a] of acc) {
-      if (a[3] < 400) continue;
-      log[palette.pigments[idx].name] = { n: a[3], mean: [a[0] / a[3], a[1] / a[3], a[2] / a[3]].map(Math.round), comp: comp[idx].map(Math.round) };
-      // Half the difference only: the mean of a mottled film sits below what the eye reads as its colour (the clean
-      // parts of a drop), and matching the mean exactly made the reds garish (user).
-      for (let k = 0; k < 3; k++) comp[idx][k] = Math.max(0, Math.min(255, comp[idx][k] + 0.7 * (targets[idx][k] - a[k] / a[3])));
+    for (const [idx, hst] of hist) {
+      if (hst[768] < 400) continue;
+      const med = [median(hst, 0), median(hst, 1), median(hst, 2)];
+      log[palette.pigments[idx].name] = { n: hst[768], median: med, comp: comp[idx].map(Math.round) };
+      // A median far from the colour is a broken measurement (a stale mask), never a shading loss: leave that colour alone.
+      if (Math.max(...med.map((v, k) => Math.abs(v - targets[idx][k]))) > 70) continue;
+      for (let k = 0; k < 3; k++) comp[idx][k] = Math.max(0, Math.min(255, comp[idx][k] + settings.colourMatch * (targets[idx][k] - med[k])));
     }
     calibLog.push(log);
   }
@@ -490,17 +503,20 @@ function resize() {
 
 // ----------------------------------------------------------------- loop
 /** Build and upload the scene for the current time, set the frame uniforms and bind the textures. */
-function uploadFrame() {
-  rebuildScene();
-  gl.uniform2f(uni.uResolution, canvas.width, canvas.height);
-  gl.uniform1f(uni.uPxPerMm, canvas.width / sheetWidthMm());
-  gl.uniform1f(uni.uTime, animTime);
+function bindTextures() {
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D_ARRAY, layers.tex);
   gl.activeTexture(gl.TEXTURE1);
   gl.bindTexture(gl.TEXTURE_2D, noiseTex);
   gl.activeTexture(gl.TEXTURE2);
   gl.bindTexture(gl.TEXTURE_2D, layers.shiftTex);
+}
+function uploadFrame() {
+  rebuildScene();
+  gl.uniform2f(uni.uResolution, canvas.width, canvas.height);
+  gl.uniform1f(uni.uPxPerMm, canvas.width / sheetWidthMm());
+  gl.uniform1f(uni.uTime, animTime);
+  bindTextures();
 }
 let fpsAcc = 0, fpsN = 0, fpsShown = 0;
 function frame(now: number) {
@@ -542,7 +558,7 @@ function savePng() {
 }
 
 // ----------------------------------------------------------------- init
-const BASE_DEFAULTS = { viscosity: 0.35, gall: 1, density: 1, combScale: 1, combStrength: 1, curlStrength: 1, transferAmp: 1, paperAge: 0.35, bleed: 0.12, edgeDark: 0.12, grain: 0.7, tooth: 0.6, granulation: 0.6, wear: 0.15, drift: 1.2, breath: 0.12, stretchLimit: 60, gapFill: 0.7 };
+const BASE_DEFAULTS = { viscosity: 0.35, gall: 1, density: 1, combScale: 1, combStrength: 1, curlStrength: 1, transferAmp: 1, paperAge: 0.35, bleed: 0.12, edgeDark: 0.12, grain: 0.7, tooth: 0.6, granulation: 0.6, wear: 0.15, colourMatch: 1, drift: 1.2, breath: 0.12, stretchLimit: 60, gapFill: 0.7 };
 function applyDefaults(name: string) {
   const r = RECIPES.find((x) => x.name === name);
   if (!r) return;
