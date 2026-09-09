@@ -68,6 +68,8 @@ const settings: Settings = {
   granulation: 0.6,
   wear: 0.15,
   colourMatch: 1,
+  hairMix: 1,
+  hairWidth: 0.25,
   transferAmp: 1.0,
   debug: DEBUG_MODES[0],
   savePng: () => savePng(),
@@ -118,7 +120,7 @@ function buildProgram() {
   program = pr;
   gl.useProgram(pr);
   uni = {};
-  for (const n of ["uResolution", "uPxPerMm", "uTime", "uOpCount", "uOpCount2", "uUnderMode", "uDebug", "uCells", "uNoise", "uRowShift", "uPaper", "uTransfer", "uTransfer2", "uDry", "uSamples", "uBleed", "uPaperTex", "uSurface", "uProbe", "uGroundUnder", "uLayerStyle", "uInterleave", "uSheetMean", "uCoated"]) uni[n] = gl.getUniformLocation(pr, n);
+  for (const n of ["uResolution", "uPxPerMm", "uTime", "uOpCount", "uOpCount2", "uUnderMode", "uDebug", "uCells", "uNoise", "uRowShift", "uPaper", "uTransfer", "uTransfer2", "uDry", "uSamples", "uBleed", "uPaperTex", "uSurface", "uProbe", "uGroundUnder", "uLayerStyle", "uInterleave", "uSheetMean", "uSheetMul", "uCoated"]) uni[n] = gl.getUniformLocation(pr, n);
   gl.uniformBlockBinding(pr, gl.getUniformBlockIndex(pr, "Ops"), 0);
   gl.uniformBlockBinding(pr, gl.getUniformBlockIndex(pr, "Palette"), 1);
   gl.uniform1i(uni.uCells, 0);
@@ -388,9 +390,10 @@ function uploadScene(scene: Scene, palette: Palette) {
   const [pr, pgc, pb] = hexToRgb(palette.paper);
   gl.uniform4f(uni.uPaper, pr, pgc, pb, settings.paperAge);
   // coverage-weighted mean colour of the sheet (equal weights where the sheet was not measured)
-  const mean = [0, 0, 0]; let wsum = 0;
-  for (const i of [palette.background, ...palette.spots]) { const pg = palette.pigments[i]; if (!pg) continue; const w = pg.frac ?? 10; const rgb = hexToRgb(pg.hex); for (let k = 0; k < 3; k++) mean[k] += rgb[k] * w; wsum += w; }
+  const mean = [0, 0, 0], lmean = [0, 0, 0]; let wsum = 0;
+  for (const i of [palette.background, ...palette.spots]) { const pg = palette.pigments[i]; if (!pg) continue; const w = pg.frac ?? 10; const rgb = colourComp.get(i) ?? hexToRgb(pg.hex); for (let k = 0; k < 3; k++) { mean[k] += rgb[k] * w; lmean[k] += Math.log(Math.max(rgb[k], 0.02)) * w; } wsum += w; }
   gl.uniform3f(uni.uSheetMean, mean[0] / Math.max(wsum, 1e-6), mean[1] / Math.max(wsum, 1e-6), mean[2] / Math.max(wsum, 1e-6));
+  gl.uniform3f(uni.uSheetMul, Math.exp(lmean[0] / Math.max(wsum, 1e-6)), Math.exp(lmean[1] / Math.max(wsum, 1e-6)), Math.exp(lmean[2] / Math.max(wsum, 1e-6)));
   const t = scene.transfer;
   gl.uniform4f(uni.uTransfer, t.mode, t.amp * settings.transferAmp, (2 * Math.PI) / t.wavelength, (t.angle * Math.PI) / 180);
   gl.uniform4f(uni.uTransfer2, t.phase, t.wobble, scene.goldNet, scene.softPaper);
@@ -400,7 +403,7 @@ function uploadScene(scene: Scene, palette: Palette) {
   gl.uniform1i(uni.uSamples, settings.antialias ? 1 : 0);
   gl.uniform4f(uni.uBleed, settings.bleed, settings.edgeWobble, settings.edgeDark, palette.laid ? 1 : 0);
   gl.uniform4f(uni.uPaperTex, 1.15, 26, settings.tooth, settings.granulation);
-  gl.uniform4f(uni.uSurface, settings.wear, 0, 0, 0);
+  gl.uniform4f(uni.uSurface, settings.wear, settings.hairMix, settings.hairWidth, 0);
 }
 
 let customScene: { scene: Scene; pal: Palette } | null = null;
@@ -558,7 +561,7 @@ function savePng() {
 }
 
 // ----------------------------------------------------------------- init
-const BASE_DEFAULTS = { viscosity: 0.35, gall: 1, density: 1, combScale: 1, combStrength: 1, curlStrength: 1, transferAmp: 1, paperAge: 0.35, bleed: 0.12, edgeDark: 0.12, grain: 0.7, tooth: 0.6, granulation: 0.6, wear: 0.15, colourMatch: 1, drift: 1.2, breath: 0.12, stretchLimit: 60, gapFill: 0.7 };
+const BASE_DEFAULTS = { viscosity: 0.35, gall: 1, density: 1, combScale: 1, combStrength: 1, curlStrength: 1, transferAmp: 1, paperAge: 0.35, bleed: 0.12, edgeDark: 0.12, grain: 0.7, tooth: 0.6, granulation: 0.6, wear: 0.15, colourMatch: 1, hairMix: 1, hairWidth: 0.25, drift: 1.2, breath: 0.12, stretchLimit: 60, gapFill: 0.7 };
 function applyDefaults(name: string) {
   const r = RECIPES.find((x) => x.name === name);
   if (!r) return;
@@ -677,7 +680,9 @@ function fitRecipe(name: string, iters = 8, paletteKey?: string) {
   const targets: Record<string, number> = {};
   for (const pg of pal.pigments) if (pg.frac !== undefined) targets[pg.name] = pg.frac;
   const savedPpi = settings.ppi, savedZoom = settings.zoom;
-  settings.ppi = 60; settings.zoom = 1;
+  // a wide sheet for the stone patterns (thousands of drops); the combed ones are measured at twice the resolution,
+  // since chords the tracer drops below its pixel never reach the count and the fine-lined colours came out short
+  settings.ppi = ["Combed", "Sprinkled", "Curled"].includes(recipe.group) ? 120 : 60; settings.zoom = 1;
   const log: unknown[] = [];
   let frac: Record<string, number> = {};
   const unlaid = new Set<string>();

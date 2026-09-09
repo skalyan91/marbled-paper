@@ -259,6 +259,15 @@ whose first colour was a full film but which show bare paper in cells get gall w
 last, sized to open that fraction. The pseudo-marbles (papier tourniquet, croisé, coulé) are
 `coated`: thin or soft paint shows the coating colour, never bare paper.
 
+Hair-fine films bleed into one another. A band drawn out narrower than the size's wicking
+width (the "Mingling width", ~0.25 mm) no longer lies beside its neighbours as a separate
+film on the paper: the pigments interleave and overlap within the fibres, and the eye sees
+light that has passed through both. Inside a pixel footprint each chord's width on the sheet
+is known, and chords below that width mix multiplicatively (a geometric mean, Beer–Lambert)
+with everything else in the footprint instead of averaging optically; the share the tracer
+cannot resolve at all reads as the sheet's pigment mixture. This is why the quill zones of a
+Feather and the cusps of a Nonpareil read dark and dull on the scans, and now on screen.
+
 Colours are matched on screen, not only in the palette. A thrown film is opaque (the paper
 shows in gaps, never through the colour; the fibre relief modulates the film's density
 instead), and before a sheet is drawn each colour is rendered flat, the median pixel of its

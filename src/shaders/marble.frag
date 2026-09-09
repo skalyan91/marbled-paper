@@ -32,8 +32,9 @@ uniform vec4 uDry;        // grain, stretchLimit, groundFill, seed
 uniform float uCoated;    // 1: the ground film is a coating on the paper (pseudo-marbles): thin or soft paint shows it, not bare paper
 uniform vec4 uBleed;      // bleed mm, edge wobble, edge darkening, laid paper
 uniform vec4 uPaperTex;   // laid pitch mm, chain pitch mm, tooth, granulation
-uniform vec4 uSurface;    // wear (rubbed cover fibres), ...
+uniform vec4 uSurface;    // wear (rubbed cover fibres), hairline mingling strength, mingling width (mm), -
 uniform vec3 uSheetMean;   // coverage-weighted mean colour of the sheet: what the trace could not resolve inside a footprint shows as this
+uniform vec3 uSheetMul;    // the same as a pigment mixture (coverage-weighted geometric mean): what hair-fine unresolved films read as
 uniform ivec4 uInterleave; // (kx, ky, px, py): this pass shades the screen pixels x ≡ px (mod kx), y ≡ py (mod ky), one per texel of a target 1/kx × 1/ky the screen
 uniform vec4 uLayerStyle[8]; // per drop layer: style bits, style param, ring amplitude (constants of the sprinkle op, looked up at shading time)
 
@@ -626,8 +627,12 @@ float styleCoverage(Hit h, inout vec3 colr, float lodMat, float sig) {
     float st0 = 0.55 - 0.35 * clamp(p - 1.0, 0.0, 1.0);   // p > 1: a wash on wet paper (Morris), fading from a quarter of the radius out
     cov *= 1.0 - smoothstep(st0, 1.0, ul + 0.5 * p * n);
     cov *= mix(1.0, 0.55, clamp(p - 1.0, 0.0, 1.0));   // a wash is dilute: the paper shows through it (dp 280)
-    colr = mix(colr, colr * 1.25 + 0.05, 0.35 * (1.0 - ul));
-    colr *= 1.0 - 0.15 * smoothstep(0.6, 0.95, ul + 0.3 * n) * clamp(2.0 - p, 0.0, 1.0);   // the darker rim only on a coated paper, not on a wash
+    // A wash on wet paper (p > 1) dries paler in the middle with a darker backrun at its edge; ink on coated paper
+    // (p <= 1: tourniquet, croisé, coulé) is a solid splotch with a soft edge and nothing else (dp 387: solid black,
+    // never rings).
+    float wash = clamp(p - 1.0, 0.0, 1.0);
+    colr = mix(colr, colr * 1.25 + 0.05, 0.35 * (1.0 - ul) * wash);
+    colr *= 1.0 - 0.15 * smoothstep(0.6, 0.95, ul + 0.3 * n) * wash;
   }
   if ((st & 512) != 0) { // BROKEN: caustic fissures
     vec2 w = worley(h.S * 0.28 + hr.xy * 3.0, h.layer + 41);
@@ -766,10 +771,29 @@ Shaded shadeChain(Trace t, vec2 P, vec3 paper, float lodScr, float tooth, int gf
   }
   Shaded s;
   s.cov = 0.0; s.rgb = vec3(0.0); s.stretch = ps[0].stretch;
-  for (int k = 0; k < MAXH; k++) { float cw = t.ws[k] * ps[k].cov; s.cov += cw; s.rgb += ps[k].rgb * cw; }
-  s.rgb = s.cov > 1e-4 ? s.rgb / s.cov : ps[0].rgb;
-  // the unresolved share of the footprint: the paint drawn out below the pixel, averaged
-  if (t.lost > 0.0) { s.rgb = mix(s.rgb, uSheetMean, t.lost); s.cov = mix(s.cov, 1.0, t.lost); }
+  // Hair-fine films bleed into one another on the paper. A band drawn out narrower than the size's wicking width
+  // (~the edge bleed) no longer lies beside its neighbours as a separate film: the pigments interleave and overlap
+  // within the fibres, and the eye sees light that has passed through both, a pigment mixture (darker and duller
+  // than the optical average, as the quill zones of a Feather and the cusps of a Nonpareil read on the scans).
+  // Each chord's width on the sheet is its share of the footprint times the pixel's size; chords below the
+  // mingling width mix multiplicatively (geometric mean, Beer–Lambert) with everything else in the footprint.
+  float mmPerPx = 1.0 / uPxPerMm;
+  float mingleMm = max(uSurface.z, 0.02);
+  vec3 mulAcc = vec3(0.0); float wFine = 0.0;
+  for (int k = 0; k < MAXH; k++) {
+    float cw = t.ws[k] * ps[k].cov; if (cw <= 0.0) continue;
+    s.cov += cw; s.rgb += ps[k].rgb * cw;
+    mulAcc += cw * log(max(ps[k].rgb, vec3(0.02)));
+    float chordMm = (t.sweep ? t.ws[k] : 1.0) * mmPerPx;
+    wFine += cw * (1.0 - smoothstep(0.5 * mingleMm, 1.5 * mingleMm, chordMm));
+  }
+  vec3 add = s.cov > 1e-4 ? s.rgb / s.cov : ps[0].rgb;
+  vec3 mul = s.cov > 1e-4 ? exp(mulAcc / s.cov) : ps[0].rgb;
+  float fine = s.cov > 1e-4 ? wFine / s.cov : 0.0;
+  s.rgb = mix(add, mul, fine * uSurface.y);
+  // the unresolved share of the footprint: films drawn out below what the tracer keeps, always hair-fine, so they
+  // read as the sheet's pigment mixture
+  if (t.lost > 0.0) { s.rgb = mix(s.rgb, mix(uSheetMean, uSheetMul, uSurface.y), t.lost); s.cov = mix(s.cov, 1.0, t.lost); }
   rgbOut = s.rgb;
   return s;
 }
@@ -825,7 +849,9 @@ void main() {
         if ((int(uLayerStyle[hk.layer].x + 0.5) & 2048) != 0 && length(hk.u) > uLayerStyle[hk.layer].y + 0.05) sc = 0.0;
       }
       if (ck == uProbe) cov += t.ws[k] * sc;
-      if (ck < 0) bare += t.ws[k]; else if (uProbe == -1) cov += t.ws[k] * (1.0 - sc);
+      if (ck < 0) bare += t.ws[k];
+      else if (uCoated > 0.5 && gf >= 0) { if (uProbe == gf) cov += t.ws[k] * (1.0 - sc); }   // an opening on coated paper shows the coating
+      else if (uProbe == -1) cov += t.ws[k] * (1.0 - sc);
     }
     if (uUnderMode != 0 && bare > 0.0) {         // double marble / overprint: the first sheet shows through bare parts of the second
       Trace tu = trace(P, mmPerPx, fibre, uOpCount, uOpCount2);
