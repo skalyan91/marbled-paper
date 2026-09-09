@@ -295,11 +295,11 @@ void invSprinkle(inout Trace t, vec4 a, vec4 b, vec4 c, vec4 d4) {
 // a=(type,theta,s,o) b=(z,L,kernel,...) c=(mean,...)
 // Two regimes of a comb drawn through a viscous size, in the coordinate n across the stroke:
 // - arc (kernel 0): the paint pushed ahead of each tine forms a front that bows between the
-//   neighbouring tines and meets the next front in a cusp: a chain of arches, K = |cos(πn/s)|,
-//   rounded at the tine and curving all the way down to the cusp at the mid-gap (nonpareil,
-//   dp 82; the arches of a wide comb, dp 274). A chain of semicircles gives flat tops and
-//   straight, near-parallel flanks once the tongues are taller than wide; a cusped bell
-//   (exponential) gives pointed tongues and straight-sided zigzags.
+//   neighbouring tines and meets the next front in a cusp: a chain of tongues, each a
+//   semi-elliptical head on a plateau that rides with the tine, cusped at the mid-gap (nonpareil,
+//   dp 82; the arches of a wide comb, dp 191, 274). A chain of semicircles alone gives straight,
+//   converging flanks once the tongues are taller than wide; a cusped bell (exponential) gives
+//   pointed tongues and straight-sided zigzags; |cos|^q heads are parabolic, too pointed.
 // - wake (kernel 1): widely set teeth pulled hard. The wake of a tine has nearly no width: the
 //   drag is the Stokes far field of a rod drawn through a viscous fluid, logarithmic in the
 //   distance, K = −½ ln(1 + (d/L)²) with a core L of half a millimetre. Its slope falls as 1/d,
@@ -336,30 +336,22 @@ void invComb(inout Trace t, vec4 a, vec4 b, vec4 c, vec4 d) {
   vec2 gN = N - slope * M;
   vec2 D = normalize(M + slope * N);           // a tine drags along the tangent of its path, not along the stroke axis
   float sum = 0.0, dsum = 0.0;
-  if (b.z < 0.5 && c.w > 0.0) {
-    // hard-pull profile |cos πf|^0.3 · (1 - |2f|^p), f = offset from the nearest tine in spacings: a gently rounded head,
-    // near-parallel flanks (the paint inside a tongue rides almost rigidly with its tine) and a cusp zone of a tenth of the
-    // pitch where all the stretching sits, as between the nested tongues of dp 172 and dp 393
+  if (b.z < 0.5) {
+    // tongue profile (1 − h)·(1 − |2f|^p) + h·sqrt(1 − 4f²), f = offset from the nearest tine in spacings, h = d.y the
+    // head weight (0.7 spacings of tongue length, Builder.combAt), p = c.w the plateau power: a semi-elliptical head
+    // (dp 82: half the width 0.06 s behind the tip, 0.8 by 0.28 s, full width by 0.7 s), then near-parallel flanks (the
+    // paint inside a tongue rides almost rigidly with its tine) and a cusp zone of a tenth of the pitch at the mid-gap
+    // where all the stretching sits, hair-thin (dp 82, 172, 393). Same formula as the Builder's `arc`.
     float f = n / s; f -= floor(f + 0.5);         // -0.5 .. 0.5
     float u = abs(2.0 * f);
+    float h = d.y;
     float up = pow(max(u, 1e-4), c.w - 1.0);
     float P = 1.0 - up * u;
     float dP = -c.w * up * sign(f) * 2.0 / s;
-    float ph = 3.14159265 * f;
-    float cs = cos(ph);
-    float ac = max(abs(cs), 1e-3);
-    float R = pow(ac, 0.3);
-    float dR = -0.3 * pow(ac, -0.7) * sin(ph) * sign(cs) * 3.14159265 / s;
-    sum = R * P;
-    dsum = dR * P + R * dP;
-  } else if (b.z < 0.5) {
-    // |cos|^0.6: flatter tongue tops and narrower cusp zones than the plain cosine, so the film is stretched thin
-    // only in a thin line at each mid-gap (dp 82: crisp tongue interiors, hair-thin cusps)
-    float ph = 3.14159265 * n / s;               // 0 at a tine, ±π/2 at the mid-gaps
-    float cs = cos(ph);
-    float ac = max(abs(cs), 1e-3);
-    sum = pow(ac, 0.6);
-    dsum = -0.6 * pow(ac, -0.4) * 3.14159265 / s * sin(ph) * sign(cs);
+    float E = sqrt(max(1.0 - u * u, 0.0));
+    float dE = -4.0 * f / (max(E, 0.02) * s);
+    sum = (1.0 - h) * P + h * E;
+    dsum = (1.0 - h) * dP + h * dE;
   } else {
     float kn = floor(n / s + 0.5);
     for (int j = -4; j <= 4; j++) {
