@@ -117,7 +117,7 @@ function buildProgram() {
   program = pr;
   gl.useProgram(pr);
   uni = {};
-  for (const n of ["uResolution", "uPxPerMm", "uTime", "uOpCount", "uOpCount2", "uUnderMode", "uDebug", "uCells", "uNoise", "uRowShift", "uPaper", "uTransfer", "uTransfer2", "uDry", "uSamples", "uBleed", "uPaperTex", "uSurface", "uProbe", "uGroundUnder", "uLayerStyle", "uInterleave", "uSheetMean"]) uni[n] = gl.getUniformLocation(pr, n);
+  for (const n of ["uResolution", "uPxPerMm", "uTime", "uOpCount", "uOpCount2", "uUnderMode", "uDebug", "uCells", "uNoise", "uRowShift", "uPaper", "uTransfer", "uTransfer2", "uDry", "uSamples", "uBleed", "uPaperTex", "uSurface", "uProbe", "uGroundUnder", "uLayerStyle", "uInterleave", "uSheetMean", "uCoated"]) uni[n] = gl.getUniformLocation(pr, n);
   gl.uniformBlockBinding(pr, gl.getUniformBlockIndex(pr, "Ops"), 0);
   gl.uniformBlockBinding(pr, gl.getUniformBlockIndex(pr, "Palette"), 1);
   gl.uniform1i(uni.uCells, 0);
@@ -394,6 +394,7 @@ function uploadScene(scene: Scene, palette: Palette) {
   gl.uniform4f(uni.uTransfer, t.mode, t.amp * settings.transferAmp, (2 * Math.PI) / t.wavelength, (t.angle * Math.PI) / 180);
   gl.uniform4f(uni.uTransfer2, t.phase, t.wobble, scene.goldNet, scene.softPaper);
   gl.uniform4f(uni.uDry, settings.grain, settings.stretchLimit, scene.groundFill + 1, settings.seed);
+  gl.uniform1f(uni.uCoated, scene.coated ? 1 : 0);
   gl.uniform1i(uni.uDebug, DEBUG_MODES.indexOf(settings.debug));
   gl.uniform1i(uni.uSamples, settings.antialias ? 1 : 0);
   gl.uniform4f(uni.uBleed, settings.bleed, settings.edgeWobble, settings.edgeDark, palette.laid ? 1 : 0);
@@ -676,7 +677,7 @@ function fitRecipe(name: string, iters = 8, paletteKey?: string) {
       const target = targets[pg.name];
       if (target === undefined || !pg.d50 || unlaid.has(pg.name)) continue;
       const actual = Math.max(0.2, frac[pg.name] ?? 0.2);
-      pg.d50 = Math.round(100 * pg.d50 * Math.pow(Math.min(1.5, Math.max(0.67, Math.sqrt(target / actual))), damp)) / 100;
+      pg.d50 = Math.min(60, Math.max(0.3, Math.round(100 * pg.d50 * Math.pow(Math.min(1.5, Math.max(0.67, Math.sqrt(target / actual))), damp)) / 100));   // a colour hidden under later throws cannot grow without bound (g89: 925 mm)
     }
     if (pal.bg && pal.paperPct !== undefined) {
       const actual = Math.max(0.5, frac.paper ?? 0.5);

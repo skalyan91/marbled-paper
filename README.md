@@ -250,6 +250,15 @@ and adjusts each colour's median spot size (and, on sheets showing paper, the gr
 until the rendered fractions match the scan. `window.marble` also exposes `measureExact`,
 `showScene(scene, pal)` and `Builder` for experiments.
 
+Every sheet in the collection has been fitted this way under the recipe it renders with (a
+fit made under a different recipe is worse than none: the combed bases inflate the thrown
+drops and thin them, and a raw fragment size used unfitted covered the sheet with the dark
+colours). The probe counts the openings a dispersant cuts in a drop (partridge speckle,
+Stormont lace, Schrottel halos, soft rims) as bare paper, as the sheet analysis does. Sheets
+whose first colour was a full film but which show bare paper in cells get gall water thrown
+last, sized to open that fraction. The pseudo-marbles (papier tourniquet, croisé, coulé) are
+`coated`: thin or soft paint shows the coating colour, never bare paper.
+
 The measurement scripts (harvest, mixture-model analysis, palette generation, baking) are not
 part of this repository because they operate on the collection's images.
 

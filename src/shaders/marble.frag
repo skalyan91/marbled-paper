@@ -29,6 +29,7 @@ uniform vec4 uPaper;      // rgb, age
 uniform vec4 uTransfer;   // mode, amp, k, angle (rad)
 uniform vec4 uTransfer2;  // phase, wobble, goldNet, softPaper
 uniform vec4 uDry;        // grain, stretchLimit, groundFill, seed
+uniform float uCoated;    // 1: the ground film is a coating on the paper (pseudo-marbles): thin or soft paint shows it, not bare paper
 uniform vec4 uBleed;      // bleed mm, edge wobble, edge darkening, laid paper
 uniform vec4 uPaperTex;   // laid pitch mm, chain pitch mm, tooth, granulation
 uniform vec4 uSurface;    // wear (rubbed cover fibres), ...
@@ -808,8 +809,16 @@ void main() {
     for (int k = 0; k < MAXH; k++) {
       Hit hk = t.hs[k];
       int ck = hk.hit ? hk.color : gf;          // -1 when clear or bare paper
-      if (ck == uProbe) cov += t.ws[k];
-      if (ck < 0) bare += t.ws[k];
+      // The openings a dispersant style cuts in a drop (partridge speckle, Stormont lace, Schrottel halos, soft rims)
+      // are bare paper to the sheet analysis, so they count as paper here too, not as the drop's colour.
+      float sc = 1.0;
+      if (hk.hit && hk.color >= 0) {
+        vec3 dc = vec3(0.5);
+        sc = clamp(styleCoverage(hk, dc, lodOf(hk.J), stretchOf(hk.J)), 0.0, 1.0);
+        if ((int(uLayerStyle[hk.layer].x + 0.5) & 2048) != 0 && length(hk.u) > uLayerStyle[hk.layer].y + 0.05) sc = 0.0;
+      }
+      if (ck == uProbe) cov += t.ws[k] * sc;
+      if (ck < 0) bare += t.ws[k]; else if (uProbe == -1) cov += t.ws[k] * (1.0 - sc);
     }
     if (uUnderMode != 0 && bare > 0.0) {         // double marble / overprint: the first sheet shows through bare parts of the second
       Trace tu = trace(P, mmPerPx, fibre, uOpCount, uOpCount2);
@@ -830,6 +839,7 @@ void main() {
   if (uDebug == 11) { float gsig = stretchOf(t.hs[0].J); float gfilm = pow(clamp(uDry.y / gsig, 0.0, 1.0), 0.35); fragColor = vec4(gfTop >= 0 ? pig[gfTop].x : 0.0, transferShade(P, lodScr), mix(0.75 + 0.25 * tooth, 1.0, gfilm * 0.6), 1.0); return; }
 
   vec3 under = paper;
+  if (uCoated > 0.5 && gfTop >= 0) under = mix(paper, col[gfTop].rgb * (0.96 + 0.08 * (tnoise(P * 0.05, lodFor(lodScr, 0.05)).g - 0.5)), pig[gfTop].x);
   if (uUnderMode != 0) {
     Trace tu = trace(P, mmPerPx, fibre, uOpCount, uOpCount2);
     Shaded u = shadeChain(tu, P, paper, lodScr, tooth, uGroundUnder, dummy);
