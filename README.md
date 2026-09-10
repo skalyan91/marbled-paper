@@ -299,10 +299,13 @@ it to every colour as a film-thickness term, exp(k·grain), with k set by the Pa
 control; a 600 dpi render of dp 102 now measures 0.074 / 0.033 / 0.035 / 0.038 in the
 bands the scan measures 0.087 / 0.042 / 0.043 / 0.039. No drop has a smooth outline
 either: the same grain displaces every paint edge (the "Edge grain" control, ±0.35 mm at 1),
-as the paint crept along the fibres it met, and the earlier a colour was thrown the further
-it creeps — an early film has floated longest, worked by the size and pushed by every drop
-laid after it, and its edge is the raggedest on the sheet (up to three and a half times the
-displacement of the last colour thrown).
+as the paint crept along the fibres it met. How far it creeps is measured, not assumed: for
+every colour of every sheet the outline's deviation from a smoothed version of itself is
+measured on the scan (median 0.19 mm rms at a 0.6 mm smoothing) and drives that layer's
+displacement, and the same masks give each colour's edge width (how far the colour fades
+into its neighbour), which drives that layer's edge blur. Within one sheet the raggedest
+colour is typically 1.7 times the smoothest and the softest edge 2.4 times the sharpest;
+both are properties of the particular colour, not of when it was thrown.
 
 The palette's paper colour is read off the scan, so it is the aged paper already; the
 ageing control only mottles it in patches and no longer darkens the whole sheet a second

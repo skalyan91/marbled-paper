@@ -37,6 +37,7 @@ uniform vec3 uSheetMean;   // coverage-weighted mean colour of the sheet: what t
 uniform vec3 uSheetMul;    // the same as a pigment mixture (coverage-weighted geometric mean): what hair-fine unresolved films read as
 uniform ivec4 uInterleave; // (kx, ky, px, py): this pass shades the screen pixels x ≡ px (mod kx), y ≡ py (mod ky), one per texel of a target 1/kx × 1/ky the screen
 uniform vec4 uLayerStyle[8]; // per drop layer: style bits, style param, ring amplitude (constants of the sprinkle op, looked up at shading time)
+uniform vec4 uLayerStyle2[8]; // per drop layer: .x how diffuse this colour's edge is (SOFTNESS, measured on the scans; 1 = a typical edge), -, -, -
 
 layout(std140) uniform Ops { vec4 op[MAX_OPS * 4]; };
 layout(std140) uniform Palette { vec4 col[16]; vec4 pig[16]; };
@@ -189,10 +190,10 @@ void candidate(inout Trace t, inout vec2 g, inout mat2 Jg, inout bool stop, ivec
         vec2 gw = Jg * vec2(-t.v.y, t.v.x);                // cells per px across the footprint
         float gwp = length(gw - dot(gw, gvu) * gvu);       // its component across the interval
         float eW = (r - dPerp) / max(gwp, 1e-6);           // outline distance across, px (>0 inside)
-        // The outline follows the paper's grain, the more so the longer the film floated before it was laid: an early
-        // colour has been worked by the size and pushed by every later drop, and its edge is the raggedest on the
-        // sheet (user). uLayerStyle[slot].w is the layer's age, 1 for the first colour thrown, 0 for the last.
-        float dispW = uBleed.y * 0.35 * uPxPerMm * t.fibre * (1.0 + 2.5 * uLayerStyle[slot].w);
+        // The outline follows the paper's grain, and how far it follows it is a property of the colour: a coarsely
+        // ground, gall-rich paint creeps into the fibre mat and leaves a ragged fringe where a fine one leaves a clean
+        // arc. uLayerStyle[slot].w is that colour's measured raggedness (FEATHER), 1 for a typical edge.
+        float dispW = uBleed.y * 0.79 * uPxPerMm * t.fibre * uLayerStyle[slot].w;
         float alphaW = A2 < 1e-12 ? 1.0 : smoothstep(-bw, bw, eW + dispW);
         claimed = true; wgt = (cb - ca) * alphaW;
         t.lost += (cb - ca) * (1.0 - alphaW);            // what lies beside the streak: unresolved, shown as the sheet mean
@@ -205,9 +206,9 @@ void candidate(inout Trace t, inout vec2 g, inout mat2 Jg, inout bool stop, ivec
     }
   } else {
     // narrow footprint: analytic edge coverage across the outline, blurred by the bleed
-    // ±0.35 mm × the control (0.6 by default), and further for a colour thrown early: its edge has been worked longer
-    // (see the swept branch). The displaced distance is the one the rim shading sees too.
-    ePx += uBleed.y * 0.35 * uPxPerMm * t.fibre * (1.0 + 2.5 * uLayerStyle[slot].w);
+    // ±0.79 mm × the control (0.6 by default) × how ragged this colour's edge measures on the scans (see the swept
+    // branch). The displaced distance is the one the rim shading sees too.
+    ePx += uBleed.y * 0.79 * uPxPerMm * t.fibre * uLayerStyle[slot].w;
     float alpha = (uSamples > 0 && gradD < 0.25 * r) ? smoothstep(-bw, bw, ePx) : (inside ? 1.0 : 0.0);
     if (t.nh == 0 && alpha > 0.0) { claimed = true; wgt = alpha; }
     else if (t.nh > 0 && alpha > 0.0) { claimed = true; wgt = alpha * (1.0 - t.ws[0]); }   // the second piece keeps its own soft edge
@@ -268,7 +269,10 @@ void invSprinkle(inout Trace t, vec4 a, vec4 b, vec4 c, vec4 d4) {
   vec2 g0 = g;
   int baseX = int(floor(g.x)), baseY = int(floor(g.y));
   bool stop = false;
-  float bw = max(0.5, uBleed.x * uPxPerMm);   // bleed width on the sheet, in pixels
+  // Bleed width on the sheet, in pixels. A finely ground, gall-rich paint sinks into the fibre mat and its edge is
+  // a gradient; a lean one sits on the surface and stops sharply. uLayerStyle2[slot].x is that colour's measured
+  // transition width relative to its sheet-mates' (SOFTNESS), 1 for a typical edge.
+  float bw = max(0.5, uBleed.x * uPxPerMm * uLayerStyle2[slot].x);
   // two crossing streams: the drops of even grid rows slide along x (each row by its own amount),
   // those of odd rows slide along y (each column by its own amount); the candidate cells are found per stream
   int N = d4.x > 0.5 ? 1 : NEIGH;   // small-drop layer (r ≤ 0.8 cell): a 3×3 neighbourhood with a 1-cell window suffices

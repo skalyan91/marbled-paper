@@ -120,7 +120,7 @@ function buildProgram() {
   program = pr;
   gl.useProgram(pr);
   uni = {};
-  for (const n of ["uResolution", "uPxPerMm", "uTime", "uOpCount", "uOpCount2", "uUnderMode", "uDebug", "uCells", "uNoise", "uRowShift", "uPaper", "uTransfer", "uTransfer2", "uDry", "uSamples", "uBleed", "uPaperTex", "uSurface", "uProbe", "uGroundUnder", "uLayerStyle", "uInterleave", "uSheetMean", "uSheetMul", "uCoated"]) uni[n] = gl.getUniformLocation(pr, n);
+  for (const n of ["uResolution", "uPxPerMm", "uTime", "uOpCount", "uOpCount2", "uUnderMode", "uDebug", "uCells", "uNoise", "uRowShift", "uPaper", "uTransfer", "uTransfer2", "uDry", "uSamples", "uBleed", "uPaperTex", "uSurface", "uProbe", "uGroundUnder", "uLayerStyle", "uLayerStyle2", "uInterleave", "uSheetMean", "uSheetMul", "uCoated"]) uni[n] = gl.getUniformLocation(pr, n);
   gl.uniformBlockBinding(pr, gl.getUniformBlockIndex(pr, "Ops"), 0);
   gl.uniformBlockBinding(pr, gl.getUniformBlockIndex(pr, "Palette"), 1);
   gl.uniform1i(uni.uCells, 0);
@@ -359,11 +359,14 @@ function uploadScene(scene: Scene, palette: Palette) {
   for (let i = 0; i < Math.min(allLayers.length, MAX_LAYERS); i++) layers.bake(i, allLayers[i], animTime);
   // per-layer shading constants (style bits, style parameter, ring amplitude), read by the shader per slot
   const layerStyle = new Float32Array(MAX_LAYERS * 4);
+  const layerStyle2 = new Float32Array(MAX_LAYERS * 4).fill(1);
   for (const o of [...scene.ops, ...underOps]) {
     if (o.type !== 1 || o.p[0] >= MAX_LAYERS) continue;
-    layerStyle.set([o.p[2], o.p[9] ?? 1, o.p[10] ?? 0, o.p[12] ?? 0], o.p[0] * 4);   // .w: the layer's age (1 = the first colour thrown, 0 = the last)
+    layerStyle.set([o.p[2], o.p[9] ?? 1, o.p[10] ?? 0, o.p[12] ?? 1], o.p[0] * 4);   // .w: how ragged this colour's edge is, 1 = a typical one (FEATHER, measured on the scans)
+    layerStyle2.set([o.p[13] ?? 1, 0, 0, 0], o.p[0] * 4);   // .x: how diffuse its edge is, 1 = a typical one (SOFTNESS)
   }
   gl.uniform4fv(uni.uLayerStyle, layerStyle);
+  gl.uniform4fv(uni.uLayerStyle2, layerStyle2);
 
   const top = packOps(scene.ops);
   const und = packOps(underOps);

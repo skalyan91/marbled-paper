@@ -228,6 +228,7 @@ const PALETTES_RAW: Palette[] = [
 
 import { GENERATED } from "./palettes.generated";
 import { ELONGATION } from "./elongation.generated";
+import { FEATHER, FEATHER_FAMILY, SOFTNESS, SOFTNESS_FAMILY } from "./feather.generated";
 // A generated (re-measured) palette with the same key replaces the hand-written one.
 export const PALETTES: Palette[] = [...PALETTES_RAW.filter((p) => !GENERATED.some((g) => g.key === p.key)), ...GENERATED].map((p) => ({ ...p, short: p.name.replace(/:.*$/, "").replace(/\s*\(dp \d+(?: \(\+\d+\))?\)$/, "") + " · " + p.source }));
 
@@ -642,12 +643,28 @@ export class Builder {
   }
 
   scene(extra: Partial<Scene> = {}): Scene {
-    // Age of each sprinkle layer: 0 for the last colour thrown, 1 for the first. The longer a film has floated, the
-    // more its edge has been worked by the size and the later drops, so the paper's grain takes it further (the user
-    // sees more feathering on the early colours of a stone sheet). Written into the op's spare parameter, which the
-    // shader reads per layer.
-    const sprinkles = this.ops.filter((o) => o.type === OP.SPRINKLE);
-    sprinkles.forEach((o, i) => { o.p[12] = sprinkles.length > 1 ? 1 - i / (sprinkles.length - 1) : 0; });
+    // How ragged each sprinkle layer's edge is. The paint crept along the paper's fibres as the sheet was laid, and
+    // how far it crept turns out to be a property of the pigment — how finely it is ground, how much gall it carries —
+    // not of the laying order: on dp 370 the raggedest outline is the red ground's and the smoothest the yellow's,
+    // although the yellow is thrown fourth of eight (measured in scratchpad/feather_common.py; FEATHER is the rms
+    // wander of the scan's outline about its own 0.3 and 0.6 mm smoothing, as a multiplier whose collection median
+    // is 1). Written into the op's spare parameter, which the shader reads per layer.
+    // The same for how *diffuse* each layer's edge is: a gall-rich paint sinks into the fibre mat and its outline is
+    // a gradient, a lean one stops sharply (SOFTNESS, the width of the colour's Lab transition on the scan relative
+    // to its sheet-mates'). The shader reads it as the per-layer blur width.
+    const lookup = (tbl: Record<string, Record<string, number>>, fam: Record<string, number>, ci: number) => {
+      const nm = this.pal.pigments[ci]?.name;
+      if (nm === undefined) return 1;
+      return tbl[this.pal.key]?.[nm] ?? fam[nm.replace(/ \d+$/, "")] ?? 1;
+    };
+    for (const o of this.ops) {
+      if (o.type !== OP.SPRINKLE) continue;
+      const cols = (this.layers[o.p[0]]?.colours ?? []).filter((c) => c >= 0);
+      const mean = (tbl: Record<string, Record<string, number>>, fam: Record<string, number>) =>
+        cols.length ? cols.reduce((s, c) => s + lookup(tbl, fam, c), 0) / cols.length : 1;   // a clear (gall) layer: a typical edge
+      o.p[12] = mean(FEATHER, FEATHER_FAMILY);
+      o.p[13] = mean(SOFTNESS, SOFTNESS_FAMILY);
+    }
     // The shader's op chain is finite; a recipe that overflows it loses its *last* passes silently (the wavy combs of
     // Serpentine, Bouquet and Peacock went missing this way at 24 ops), so shout.
     if (this.ops.length > MAX_OPS) console.warn(`recipe has ${this.ops.length} ops; the shader keeps the first ${MAX_OPS}`);
