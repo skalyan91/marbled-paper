@@ -112,6 +112,8 @@ struct Trace {
   bool done;
   float fibre;    // paper fibre noise at this pixel, −1..1 (edge wobble)
   float lost;     // footprint weight of chords that found no slot (redistributed at the end)
+  Hit thin;       // THIN film (gall and oil) lying over the pieces: an overlay, the footprint beneath it stays unclaimed
+  float wthin;    // its footprint weight (0 none)
 };
 
 // leading right singular vector of a 2×2 (direction in the input space along which |J x| is largest)
@@ -139,7 +141,8 @@ const float W0 = 0.9, W1 = 1.5;
 // global time order for every pixel that keeps the loop uniform across a warp.
 // (Within one colour layer the drop order is visually irrelevant: same-colour drops merge.)
 // One candidate cell of a sprinkle layer (see invSprinkle). Windows w0/w1 in cells.
-void candidate(inout Trace t, inout vec2 g, inout mat2 Jg, inout bool stop, ivec2 cc, vec2 sh, int slot, float cell, vec4 a, vec4 c, mat2 R, float bw, float w0, float w1) {
+// thin: a THIN film (see below); rho: the radius it pushed the earlier paint to, as a fraction of its own
+void candidate(inout Trace t, inout vec2 g, inout mat2 Jg, inout bool stop, ivec2 cc, vec2 sh, int slot, float cell, vec4 a, vec4 c, mat2 R, float bw, float w0, float w1, bool thin, float rho) {
   vec4 tx = texelFetch(uCells, ivec3(cc & (TILE - 1), slot), 0);
   if (tx.z <= 0.0) return;
   vec2 C = vec2(cc) + 0.5 + tx.xy + sh;   // the drop's row or column has slid by sh cells
@@ -191,19 +194,34 @@ void candidate(inout Trace t, inout vec2 g, inout mat2 Jg, inout bool stop, ivec
         float eW = (r - dPerp) / max(gwp, 1e-6);           // outline distance across, px (>0 inside)
         float alphaW = A2 < 1e-12 ? 1.0 : smoothstep(-bw, bw, eW + uBleed.y * bw * t.fibre);
         claimed = true; wgt = (cb - ca) * alphaW;
-        t.lost += (cb - ca) * (1.0 - alphaW);            // what lies beside the streak: unresolved, shown as the sheet mean
-      } else t.lost += cb - ca;                          // a chord too thin to trace: still paint, not bare ground
+        if (!thin) t.lost += (cb - ca) * (1.0 - alphaW);   // what lies beside the streak: unresolved, shown as the sheet mean
+      } else if (!thin) t.lost += cb - ca;                // a chord too thin to trace: still paint, not bare ground
       // remainder: the larger of the two leftover pieces; the smaller is not traced further, so it too
       // is unresolved paint (folding it into the uncovered rest showed bare ground as a stipple wherever
       // a film is drawn out far below the pixel: the fans of a Feather)
-      float left = ca - lo2, right = hi2 - cb;
-      if (left >= right) { t.hi = ca; t.lost += max(right, 0.0); } else { t.lo = cb; t.lost += max(left, 0.0); }
+      if (!thin) {
+        float left = ca - lo2, right = hi2 - cb;
+        if (left >= right) { t.hi = ca; t.lost += max(right, 0.0); } else { t.lo = cb; t.lost += max(left, 0.0); }
+      }
     }
   } else {
     // narrow footprint: analytic edge coverage across the outline, blurred by the bleed
     float alpha = (uSamples > 0 && gradD < 0.25 * r) ? smoothstep(-bw, bw, ePx + uBleed.y * bw * t.fibre) : (inside ? 1.0 : 0.0);
     if (t.nh == 0 && alpha > 0.0) { claimed = true; wgt = alpha; }
     else if (t.nh > 0 && alpha > 0.0) { claimed = true; wgt = alpha * (1.0 - t.ws[0]); }   // the second piece keeps its own soft edge
+  }
+  if (claimed && thin) {
+    // THIN: a gall-and-oil film floats over what it spread across. It is kept as an overlay and the footprint stays
+    // unclaimed, so the trace goes on beneath it to the ground and the veins it only pushed part of the way out.
+    if (t.wthin <= 0.0) {
+      Hit h;
+      h.hit = true; h.layer = slot; h.cell = cc; h.u = q / r; h.color = int(floor(tx.a + 0.5));
+      h.S = t.S; h.ePx = ePx;
+      h.J = transpose(R) * Jg * cell;
+      t.thin = h;
+    }
+    t.wthin = min(t.wthin + wgt, 1.0);   // overlapping films of one throw: the same wet film
+    claimed = false;
   }
   if (claimed) {
     Hit h;
@@ -237,6 +255,10 @@ void candidate(inout Trace t, inout vec2 g, inout mat2 Jg, inout bool stop, ivec
     }
   }
   // windowed inverse drop displacement g' = C + phi(d) q, and its Jacobian
+  if (thin) {
+    r *= rho;                                 // the film pushed the earlier paint only to rho of its radius
+    if (d < r) { g = C + n * 0.02; Jg *= 0.05; return; }   // inside the pushed radius: what lies here came from the film's centre
+  }
   float tt = clamp((d - w0) / (w1 - w0), 0.0, 1.0);
   float w = 1.0 - tt * tt * (3.0 - 2.0 * tt);
   float dw = -6.0 * tt * (1.0 - tt) / (w1 - w0);
@@ -266,6 +288,8 @@ void invSprinkle(inout Trace t, vec4 a, vec4 b, vec4 c, vec4 d4) {
   // those of odd rows slide along y (each column by its own amount); the candidate cells are found per stream
   int N = d4.x > 0.5 ? 1 : NEIGH;   // small-drop layer (r ≤ 0.8 cell): a 3×3 neighbourhood with a 1-cell window suffices
   float w0 = d4.x > 0.5 ? 0.6 : W0, w1 = d4.x > 0.5 ? 1.0 : W1;
+  bool thin = (int(a.w + 0.5) & 4096) != 0;   // THIN film: an overlay that pushes to rho of its radius (d4.y mod 4; the rest is the shading's reference colour)
+  float rho = thin ? clamp(d4.y > 0.0 ? d4.y - 4.0 * floor(d4.y / 4.0) : 0.85, 0.05, 2.0) : 1.0;   // may exceed 1: the gall front ahead of the film
   for (int oy = NEIGH; oy >= -NEIGH; oy--) {
     if (oy > N || oy < -N) continue;
     int cy = baseY + oy;
@@ -274,7 +298,7 @@ void invSprinkle(inout Trace t, vec4 a, vec4 b, vec4 c, vec4 d4) {
     int bx = int(floor(g0.x - sh));
     for (int ox = NEIGH; ox >= -NEIGH; ox--) {
       if (stop || ox > N || ox < -N) continue;
-      candidate(t, g, Jg, stop, ivec2(bx + ox, cy), vec2(sh, 0.0), slot, cell, a, c, R, bw, w0, w1);
+      candidate(t, g, Jg, stop, ivec2(bx + ox, cy), vec2(sh, 0.0), slot, cell, a, c, R, bw, w0, w1, thin, rho);
     }
   }
   for (int ox = NEIGH; ox >= -NEIGH; ox--) {
@@ -286,13 +310,13 @@ void invSprinkle(inout Trace t, vec4 a, vec4 b, vec4 c, vec4 d4) {
       if (stop || oy > N || oy < -N) continue;
       int cy = by + oy;
       if ((cy & 1) == 0) continue;
-      candidate(t, g, Jg, stop, ivec2(cx, cy), vec2(0.0, sh), slot, cell, a, c, R, bw, w0, w1);
+      candidate(t, g, Jg, stop, ivec2(cx, cy), vec2(0.0, sh), slot, cell, a, c, R, bw, w0, w1, thin, rho);
     }
   }
   if (!t.done) { t.S = b.xy + transpose(R) * (g * cell); t.J = transpose(R) * Jg * cell; }
 }
 
-// a=(type,theta,s,o) b=(z,L,kernel,...) c=(mean,...)
+// a=(type,theta,s,o) b=(z,L,kernel,waveAmp) c=(mean,waveK,wavePhase,plateau) d=(waveShape,head,-,-)
 // Two regimes of a comb drawn through a viscous size, in the coordinate n across the stroke:
 // - arc (kernel 0): the paint pushed ahead of each tine forms a front that bows between the
 //   neighbouring tines and meets the next front in a cusp: a chain of tongues, each a
@@ -489,6 +513,7 @@ void invStretch(inout Trace t, vec4 a) {
 Trace trace(vec2 P, float mmPerPx, float fibre, int start, int count) {
   Trace t;
   t.S = P; t.J = mat2(mmPerPx); t.nh = 0; t.sweep = false; t.v = vec2(1.0, 0.0); t.lo = -0.5; t.hi = 0.5; t.tmid = 0.0; t.done = false; t.fibre = fibre; t.lost = 0.0;
+  t.thin = noHit(P); t.wthin = 0.0;
   for (int k = 0; k < MAXH; k++) { t.hs[k] = noHit(P); t.ws[k] = 0.0; }
   for (int i = 0; i < MAX_OPS; i++) {
     if (i >= count || t.done) break;
@@ -579,6 +604,11 @@ float styleCoverage(Hit h, inout vec3 colr, float lodMat, float sig) {
     colr *= 1.0 - 0.28 * p * (1.0 - smoothstep(0.0, 0.7, ul));
   }
   if ((st & 2048) != 0) cov *= 1.0 - smoothstep(p - 0.05, p + 0.05, ul);   // EYE: the core's soft edge
+  if ((st & 4096) != 0) {   // THIN: the film thins towards its rim (dp 76: fuzzy disc edges) and lies unevenly, a fine mottle
+    // through which the ground shows more or less (dp 76: the discs' L runs 64–140 about a median of 92)
+    float m1 = tnoise(h.S * 1.4 + hr.xy * 5.0, lodFor(lodMat, 1.4)).g, m2 = tnoise(h.S * 0.35 + hr.zw * 3.0, lodFor(lodMat, 0.35)).r;
+    cov *= (1.0 - 0.5 * smoothstep(0.72, 1.0, ul)) * clamp(1.0 + 0.55 * (m1 - 0.5) + 0.4 * (m2 - 0.5), 0.2, 1.4);
+  }
   if ((st & 4) != 0) { // PARTRIDGE: a turpentine-cut colour, speckled with paper openings
     // The openings have a fixed physical scale whatever the drop's size (dp 65: median 0.3 mm, ~1.4 per mm², plus a
     // sparser 1–2 mm class; the same in 4 mm satellites and 30 mm drops), so they are evaluated in material mm, and a
@@ -730,6 +760,15 @@ Shaded shadePattern(Hit h, vec2 P, vec3 paper, float lodScr, float tooth, int gf
   // pigment texture (slight value variation, stronger for earths)
   base *= 1.0 + (0.10 + 0.12 * pg.y) * (gB - 0.5);
   cov *= styleCoverage(h, base, lodMat, sig);
+  if ((int(uLayerStyle[h.layer].x + 0.5) & 4096) != 0) {   // THIN: a translucent film; what the trace found beneath composes through it
+    float a = clamp(uLayerStyle[h.layer].y, 0.05, 1.0);
+    // the palette's colour is the film's mean as the sheet analysis read it, over the ground it mostly lies on: the
+    // film's own colour is the one that gives that mean back through the opacity (dp 76: grey L 97 over black L 28)
+    int ref = int(floor(uLayerStyle[h.layer].w / 4.0)) - 1;   // the colour the mean was read over (packed with the pushed radius); the ground film if none
+    if (ref < 0) ref = gf;
+    if (ref >= 0) base = clamp((base - (1.0 - a) * col[ref].rgb) / a, 0.0, 1.0);
+    cov *= a;
+  }
   cov *= transferShade(P, lodScr);
   // pigment piles up slightly at the gall front (drop outline)
   float rimPx = min(0.3 * uPxPerMm, 3.0);
@@ -786,6 +825,13 @@ Shaded shadeChain(Trace t, vec2 P, vec3 paper, float lodScr, float tooth, int gf
   // the unresolved share of the footprint: films drawn out below what the tracer keeps, always hair-fine, so they
   // read as the sheet's pigment mixture
   if (t.lost > 0.0) { s.rgb = mix(s.rgb, mix(uSheetMean, uSheetMul, uSurface.y), t.lost); s.cov = mix(s.cov, 1.0, t.lost); }
+  if (t.wthin > 0.0) {   // a THIN film over the pieces: they compose through it (over-operator on the coverage)
+    Shaded th = shadePattern(t.thin, P, paper, lodScr, tooth, gf);
+    float ct = clamp(th.cov * t.wthin, 0.0, 1.0), cb = s.cov;
+    float cov = 1.0 - (1.0 - cb) * (1.0 - ct);
+    s.rgb = cov > 1e-4 ? (s.rgb * cb * (1.0 - ct) + th.rgb * ct) / cov : th.rgb;
+    s.cov = cov;
+  }
   rgbOut = s.rgb;
   return s;
 }
@@ -813,6 +859,7 @@ void main() {
   Trace t = trace(P, mmPerPx, fibre, 0, uOpCount);
   Hit h = t.hs[0];
   { float wb = t.ws[0]; for (int k = 1; k < MAXH; k++) if (t.ws[k] > wb) { wb = t.ws[k]; h = t.hs[k]; } }
+  if (t.wthin >= 0.5) h = t.thin;   // a THIN film covering most of the pixel is what the flat views see
 
   if (uDebug == 1) { fragColor = vec4(h.hit && h.color >= 0 ? hash4(h.cell, h.layer).rgb : vec3(0.1), 1.0); return; }
   if (uDebug == 7) { // flat palette colours for coverage measurement; paper/clear = black
@@ -844,6 +891,12 @@ void main() {
       if (ck < 0) bare += t.ws[k];
       else if (uCoated > 0.5 && gf >= 0) { if (uProbe == gf) cov += t.ws[k] * (1.0 - sc); }   // an opening on coated paper shows the coating
       else if (uProbe == -1) cov += t.ws[k] * (1.0 - sc);
+    }
+    if (t.wthin > 0.0) {   // a THIN film reads as its own colour to the sheet analysis (the palette's grey is the disc's mean), whatever shows through it
+      vec3 dc = vec3(0.5);
+      float st = clamp(styleCoverage(t.thin, dc, lodOf(t.thin.J), stretchOf(t.thin.J)), 0.0, 1.0) * t.wthin;
+      cov *= 1.0 - st; bare *= 1.0 - st;
+      if (uProbe == t.thin.color) cov += st;
     }
     if (uUnderMode != 0 && bare > 0.0) {         // double marble / overprint: the first sheet shows through bare parts of the second
       Trace tu = trace(P, mmPerPx, fibre, uOpCount, uOpCount2);

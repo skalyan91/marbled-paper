@@ -268,6 +268,27 @@ with everything else in the footprint instead of averaging optically; the share 
 cannot resolve at all reads as the sheet's pigment mixture. This is why the quill zones of a
 Feather and the cusps of a Nonpareil read dark and dull on the scans, and now on screen.
 
+The bath drifts between throws, and each colour's spots carry that drift ever after. For
+every sheet the elongation of each colour's spots was measured on the scan (area-weighted
+quartiles of the major-to-minor axis ratio, in `elongation.generated.ts`): the earliest
+colours are stretched two- to threefold and even the last ones are not round. After each
+throw the bath is swirled by a pair of long sinusoidal shears (70–110 mm and 25–40 mm),
+with a strain that brings that layer from the deformation the later throws will push it to
+up to its measured median, and an angle between the pair that widens the spread towards
+the measured upper quartile. Rendered per-layer medians now sit within a few percent of
+the scans' from the first throw to the last.
+
+A comb drawn twice, the second pass halving the first (the get-gel of every nonpareil,
+zebra and feather), cuts sharply: each tine's wake has almost no width (a logarithmic
+drag with a 0.5 mm core), so a drop in its path is drawn into a thread and all but
+severed while the drop beside it barely moves. The tongues a single fine pass leaves are
+semi-ellipses about 0.7 spacings deep on parallel flanks, measured on the scans, with
+cusped valleys between. Waved combs keep their measured wavelength per sheet.
+
+The gall-and-oil discs of a Schrottel are a thin film: what lies beneath (the black ground
+and the veins the film pushed to its rim) shows through at 60 %, while the eyes and their
+halos are opaque paint.
+
 Colours are matched on screen, not only in the palette. A thrown film is opaque (the paper
 shows in gaps, never through the colour; the fibre relief modulates the film's density
 instead), and before a sheet is drawn each colour is rendered flat, the median pixel of its

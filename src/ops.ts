@@ -36,6 +36,7 @@ export const STYLE = {
   BROKEN: 512, // caustic fracture (Romantic)
   GALLDOTS: 1024, // sparse small clear "gall spots" inside later colours
   EYE: 2048, // dispersant droplet: a core of the drop's colour inside a ring cleared to the paper; styleParam = core radius / drop radius (Schrottel)
+  THIN: 4096, // a thin dispersant film (gall and oil): translucent, and it pushes the earlier paint only part of the way out, so the ground and the veins beneath show through; styleParam = opacity, styleParam2 = pushed radius / film radius (above 1: the gall front runs ahead of the film) + 4 × (1 + the palette index of the colour the film's measured mean was read over, 0 for the ground film) (Schrottel's discs)
 } as const;
 
 export function packOps(forwardOps: Op[]): { data: Float32Array; count: number } {
