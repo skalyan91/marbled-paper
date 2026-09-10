@@ -189,7 +189,13 @@ void candidate(inout Trace t, inout vec2 g, inout mat2 Jg, inout bool stop, ivec
         vec2 gw = Jg * vec2(-t.v.y, t.v.x);                // cells per px across the footprint
         float gwp = length(gw - dot(gw, gvu) * gvu);       // its component across the interval
         float eW = (r - dPerp) / max(gwp, 1e-6);           // outline distance across, px (>0 inside)
-        float alphaW = A2 < 1e-12 ? 1.0 : smoothstep(-bw, bw, eW + uBleed.y * 0.35 * uPxPerMm * t.fibre);   // the outline displaced along the grain, ±0.3 mm × feathering
+        // The outline follows the paper's grain, but the paint cannot creep further than a fraction of the drop's own
+        // width: on a film drawn out thin (the early colours, stretched into veins) a fixed ±0.35 mm displacement is
+        // most of the width and frays the edge into a fringe (user: "feathering at the edges of dots, more for early
+        // ones"). Cap it at a fifth of the half-width across.
+        float rpxW = r / max(gwp, 1e-6);
+        float dispW = clamp(uBleed.y * 0.35 * uPxPerMm * t.fibre, -0.2 * rpxW, 0.2 * rpxW);
+        float alphaW = A2 < 1e-12 ? 1.0 : smoothstep(-bw, bw, eW + dispW);
         claimed = true; wgt = (cb - ca) * alphaW;
         t.lost += (cb - ca) * (1.0 - alphaW);            // what lies beside the streak: unresolved, shown as the sheet mean
       } else t.lost += cb - ca;                          // a chord too thin to trace: still paint, not bare ground
@@ -201,7 +207,10 @@ void candidate(inout Trace t, inout vec2 g, inout mat2 Jg, inout bool stop, ivec
     }
   } else {
     // narrow footprint: analytic edge coverage across the outline, blurred by the bleed
-    ePx += uBleed.y * 0.35 * uPxPerMm * t.fibre;   // ±0.35 mm × the control (0.6 by default): the scans' outlines deviate 0.14–0.25 mm rms from a 0.15 mm smoothing   // the outline follows the paper's grain (see paperColor): the displaced distance is the one the rim shading sees too
+    // ±0.35 mm × the control (0.6 by default), never more than a fifth of the drop's own radius: the scans' outlines
+    // deviate 0.14–0.25 mm rms from a 0.15 mm smoothing, and a small drop's edge must not dissolve into a fringe
+    float rpxN = r / max(gradD, 1e-6);
+    ePx += clamp(uBleed.y * 0.35 * uPxPerMm * t.fibre, -0.2 * rpxN, 0.2 * rpxN);   // the displaced distance is the one the rim shading sees too
     float alpha = (uSamples > 0 && gradD < 0.25 * r) ? smoothstep(-bw, bw, ePx) : (inside ? 1.0 : 0.0);
     if (t.nh == 0 && alpha > 0.0) { claimed = true; wgt = alpha; }
     else if (t.nh > 0 && alpha > 0.0) { claimed = true; wgt = alpha * (1.0 - t.ws[0]); }   // the second piece keeps its own soft edge

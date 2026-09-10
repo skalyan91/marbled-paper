@@ -313,6 +313,15 @@ the median size refitted for coverage between steps. Over 375 sheets the fitted 
 median of 1.13, a tenth of colours below 0.5 (heavy-tailed, a few giants among many small
 drops) and a tenth at 3 (drops all of one size).
 
+A throw is a Poisson process, not one drop per cell. The lattice the drops were placed on
+was too regular: it measures a Clark–Evans nearest-neighbour ratio of 1.24 where the scans
+measure 0.90–0.99, so no two drops of a colour ever fell close together. Each cell is now
+subdivided and only one sub-cell in `sub²` holds a drop, which is thrown anywhere within a
+whole cell of its own, so the count in a patch varies and neighbours may land side by side;
+`sub` is the largest subdivision whose drops the shader can still find (radius plus jitter
+within its lookup window, which also keeps each layer on its own cost path). That brings the
+placement to 1.10.
+
 Whether drops of different colours seek each other out was measured across the collection
 and the answer is no: the cross pair-correlation of drops of one colour around drops of
 another is 0.99 at half a spacing, 0.98 at one and 0.97 at two, and the mean distance to
