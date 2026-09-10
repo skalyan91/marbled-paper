@@ -642,6 +642,12 @@ export class Builder {
   }
 
   scene(extra: Partial<Scene> = {}): Scene {
+    // Age of each sprinkle layer: 0 for the last colour thrown, 1 for the first. The longer a film has floated, the
+    // more its edge has been worked by the size and the later drops, so the paper's grain takes it further (the user
+    // sees more feathering on the early colours of a stone sheet). Written into the op's spare parameter, which the
+    // shader reads per layer.
+    const sprinkles = this.ops.filter((o) => o.type === OP.SPRINKLE);
+    sprinkles.forEach((o, i) => { o.p[12] = sprinkles.length > 1 ? 1 - i / (sprinkles.length - 1) : 0; });
     // The shader's op chain is finite; a recipe that overflows it loses its *last* passes silently (the wavy combs of
     // Serpentine, Bouquet and Peacock went missing this way at 24 ops), so shout.
     if (this.ops.length > MAX_OPS) console.warn(`recipe has ${this.ops.length} ops; the shader keeps the first ${MAX_OPS}`);
