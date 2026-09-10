@@ -53,7 +53,7 @@ Operators (`src/shaders/marble.frag`, authored forward in `src/recipes.ts`):
 | op | forward map | inverse used by the shader |
 |---|---|---|
 | drop of radius r at C | P ↦ C + (P−C)·√(1 + r²/‖P−C‖²) | P ↦ C + (P−C)·√(1 − r²/‖P−C‖²), windowed to a 5×5 / 7×7 cell neighbourhood |
-| comb (infinite train of parallel tines, spacing s) | P ↦ P + z·K(n − o)·M | two regimes, mean drag removed. *Arc*: the paint pushed ahead of each tine forms a front that bows between the neighbouring tines and meets the next in a cusp, K = √(1 − 4f² + ε) with f the position in the gap: rounded tongues, cusped valleys, flanks drawn into hair lines (nonpareil, dp 82; the arches of a wide comb). *Wake*, for widely set teeth pulled hard: the wake has nearly no width; the drag diverges towards the tine's path as L/d with a core of half a millimetre, K = Σ (1 + (d/L)²)^{−1/2} over the nine nearest tines. A line crossing the stroke becomes a hyperbola asymptotic to the path; drawn across and back with halving, the lines accumulate along each path into a straight column of near-parallel lines (the quill) joined by sigmoids of opposite sense in alternate gaps, crossing the gap at 60–70° midway (Feather, dp 29). The pull is set by that angle: ~470 mm at the tine for 55 mm tines |
+| comb (infinite train of parallel tines, spacing s) | P ↦ P + z·K(n − o)·M | two regimes, mean drag removed. *Arc*: the paint pushed ahead of each tine forms a front that bows between the neighbouring tines and meets the next in a cusp, K = √(1 − 4f² + ε) with f the position in the gap: rounded tongues, cusped valleys, flanks drawn into hair lines (nonpareil, dp 82; the arches of a wide comb). *Wake*, for widely set teeth pulled hard: the wake has nearly no width; the drag rises towards the tine's path like a logarithm with a core of half a millimetre and is screened beyond ℓ by the water under the film, K = Σ ½ ln((ℓ² + d²)/(L² + d²)) over the nine nearest tines. A line crossing the stroke becomes a hyperbola asymptotic to the path; drawn across and back with halving, the lines accumulate along each path into a straight column of near-parallel lines (the quill) joined by sigmoids of opposite sense in alternate gaps, crossing the gap at 60–70° midway (Feather, dp 29). The pull is set by that angle: ~470 mm at the tine for 55 mm tines |
 | sinusoidal shear | x ↦ x − A·sin(k·y + φ) | exact; also conjugates combs into wavy combs |
 | vortex (stylus swirl) | rotate about C by z·e^{−max(0,d−r)/L}/max(d,core) | rotate by the opposite angle |
 | Oseen short stroke | Jaffer eq. 14/15, segmented | segments run backwards (approximate, Fantasy/Placard only) |
@@ -91,7 +91,23 @@ and a moving edge reads as a little motion blur rather than a comb; the paint mo
 a pixel per frame.
 
 The comb differential ("ripple") is expressed in units of the tine spacing and was
-measured on the scans: ≈1.2–1.5 spacings for fine combs, 2–6 for the get-gel passes.
+measured on the scans: ≈1.2–1.5 spacings for fine combs, 2–6 for the get-gel passes. A fine
+comb's tongues run 4.4 spacings deep by default: at true scale the scans' tongues are two to
+three times as deep as they are wide (dp 82, 305), twice what the render drew before. Sheets
+whose own tongue length was measured keep it, and so do the patterns that comb the tongues
+again afterwards (Icarus, Cathedral).
+
+A tine's wake is screened. The free two-dimensional Stokes drag of a rod is logarithmic and so
+unbounded, felt right across the gap; a film floating on a bath instead gives its momentum up to
+the water beneath, and past a screening length the logarithm crosses over to a decaying far
+field (the Saffman–Delbrück picture, the damping the stylus twirl already used). The regularised
+form is K = ½ ln((ℓ² + d²)/(L² + d²)): the log core between the tine's core L and the screening
+length ℓ, falling off as 1/d² beyond it. ℓ is a third of the way to the neighbouring tine path,
+so a tine cuts a deep narrow V along its own path and leaves the middle of the gap where it was
+instead of bowing the whole gap. The two-row wavy combs of Bouquet and Peacock interleave their
+rows, so their neighbouring path is half a spacing away and they screen at spacing/6: each tine
+draws its own column out into a fan and the cells between the fans keep the nonpareil they were
+given, where the free logarithm swept whole sheets into one drift.
 
 ### Drying onto the paper
 
@@ -280,8 +296,8 @@ the scans' from the first throw to the last.
 
 A comb drawn twice, the second pass halving the first (the get-gel of every nonpareil,
 zebra and feather), cuts sharply: each tine's wake has almost no width (a logarithmic
-drag with a 0.5 mm core), so a drop in its path is drawn into a thread and all but
-severed while the drop beside it barely moves. The tongues a single fine pass leaves are
+drag with a 0.5 mm core, screened at a third of the spacing), so a drop in its path is drawn
+into a thread and all but severed while the drop beside it barely moves. The tongues a single fine pass leaves are
 semi-ellipses about 0.7 spacings deep on parallel flanks, measured on the scans, with
 cusped valleys between. Waved combs keep their measured wavelength per sheet.
 

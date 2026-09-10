@@ -289,6 +289,10 @@ function hash01(seed: number, i: number) {
 /** Comb options: `ripple` is the tine-to-mid-gap differential in spacings, `L` the tine's wake width (mm, wake kernel),
  *  `kernel` "arc" (a chain of fronts between the tines: tongues and arches) or "wake" (widely set teeth pulled hard: asymptotic barbs). */
 export interface CombOpts { offset?: number; ripple?: number; L?: number; strength?: number; kernel?: "arc" | "wake";
+  /** screening length of the wake in mm: the film's drag against the water beneath damps the tine's far field beyond
+   *  this distance (Saffman-Delbrueck), so the pull is felt only within a few millimetres of the tine's path and the
+   *  middle of a gap is left where it was. Unset: the free 2-D Stokes far field, felt right across the gap. */
+  damp?: number;
   /** the comb drawn along a sinusoid across the stroke: amplitude and wavelength in mm, phase in radians */
   wave?: { amp: number; wavelength: number; phase?: number; shape?: "sine" | "triangle" };
   /** hard-pull profile |cos πf|^0.3 · (1 - |2f|^p) instead of |cos|^0.6: rounded head, near-parallel flanks (the tongue interior
@@ -296,6 +300,16 @@ export interface CombOpts { offset?: number; ripple?: number; L?: number; streng
   plateau?: number }
 
 
+
+/** Depth of the fine comb's tongues in spacings, twice the 2.2 they were drawn at until now: at true scale the scans'
+ *  tongues run two to three times their pitch (dp 82, 305), where the render's ran about one (user: a sharp comb should
+ *  cut a V "at least twice as deep"). Sheets whose own tongue length was measured pass their own `ripple` and keep it. */
+const DEEP_TONGUE = 4.4;
+/** Screening length of a comb's wake as a fraction of the distance to the neighbouring tine path (see CombOpts.damp).
+ *  A third: the paint within a third of the way to the next path follows the tine, the rest of the gap stays where it
+ *  was (user: the drag should be "limited to just around the comb"). A two-row comb's rows interleave, so its
+ *  neighbouring path is half a spacing away and the recipe passes spacing/6. */
+const CONFINE = 1 / 3;
 
 export class Builder {
   ops: Op[] = [];
@@ -414,7 +428,8 @@ export class Builder {
     const L = (o.L ?? s * (0.22 + 0.33 * p.viscosity));
     const wake = o.kernel === "wake";
     // train sum as evaluated in the shader, for normalisation: a chain of arcs, or (1 + (d/L)²)^-1/2 per tine over the nine nearest tines
-    const K = (u: number) => -0.5 * Math.log(1 + u * u);
+    const aw = o.damp ? o.damp / L : 0;   // the wake screened beyond `damp` mm (see CombOpts.damp and invComb)
+    const K = (u: number) => (aw ? 0.5 * Math.log((aw * aw + u * u) / (1 + u * u)) : -0.5 * Math.log(1 + u * u));
     const ripple = (o.ripple ?? 1.2) * (o.strength ?? 1) * p.combStrength; // tongue length in spacings
     // arc profile (must match invComb): a semi-elliptical head 0.7 spacings deep (dp 82 measured: half the width at 0.06 s
     // from the tip, 0.8 at 0.28 s, 0.93 at 0.5 s, full width by 0.74 s), the rest of the tongue a plateau riding with its
@@ -427,7 +442,7 @@ export class Builder {
     const z = (ripple * s) / Math.max(1e-3, sum(0) - sum(0.5));
     const drift = p.animate && !this.still ? 0.12 * s * Math.sin(0.11 * p.time + this.n) : 0;
     const w = o.wave;
-    this.ops.push({ type: OP.COMB, p: [rad(dirDeg), s, (o.offset ?? 0) * p.combScale + drift, z, L, wake ? 1 : 0, w ? w.amp * p.combScale : 0, mean, w ? (2 * Math.PI) / (w.wavelength * p.combScale) : 0, w?.phase ?? 0, pl, w?.shape === "triangle" ? 1 : 0, head] });
+    this.ops.push({ type: OP.COMB, p: [rad(dirDeg), s, (o.offset ?? 0) * p.combScale + drift, z, L, wake ? 1 : 0, w ? w.amp * p.combScale : 0, mean, w ? (2 * Math.PI) / (w.wavelength * p.combScale) : 0, w?.phase ?? 0, pl, w?.shape === "triangle" ? 1 : 0, head, aw] });
     this.n++;
     return this;
   }
@@ -449,6 +464,10 @@ export class Builder {
    *  rest of the drop is barely moved (user, dp 82/15: "very sharp, nearly breaking the dots the comb passes through"). */
   comb2(dirDeg: number, spacing: number, o: CombOpts = {}) {
     const sharp: CombOpts = { kernel: "wake", L: 0.5, ...o };
+    // The wake is screened at a third of the spacing, so the tine cuts a deep narrow V along its own path and the paint
+    // between the tines rides along nearly undisturbed, instead of the whole gap bowing (the free logarithm's far
+    // field). The arc kernel keeps its own profile: a comb2 asked for arcs is a gentle two-pass comb (Peacock).
+    if (sharp.kernel === "wake") sharp.damp = sharp.damp ?? spacing * CONFINE;
     this.comb(dirDeg, spacing, { ...sharp });
     this.comb(dirDeg + 180, spacing, { ...sharp, offset: spacing / 2, strength: (o.strength ?? 1) * 0.85 });
     return this;
@@ -468,7 +487,7 @@ export class Builder {
     const p = this.p;
     const phase = p.animate && !this.still ? 0.06 * p.time : 0;
     const dir = dirDeg + this.axis;
-    const base = { strength: o.strength, ripple: o.ripple, L: o.L, kernel: o.kernel, plateau: o.plateau };
+    const base = { strength: o.strength, ripple: o.ripple, L: o.L, kernel: o.kernel, plateau: o.plateau, damp: o.damp };
     // The second row is a second comb composed after the first: each row an exact shear, so the map never folds. (Both
     // rows summed in one kernel folded wherever their near fields overlapped; with the arc profile the first row's cusp
     // lands on the second row's tine wherever the wave crosses zero, so a steep wave wants the sharp wake, kernel "wake"
@@ -822,7 +841,7 @@ const nonpareilBase = (b: Builder, fine = 4, o: { dir?: number; ripple?: number;
   b.jog(dir + 90);   // the bands jog sideways irregularly before the fine comb; the scallops stay regular (dp 284)
   o.beforeFine?.(b);  // a pass on the get-gel bands before the fine comb cuts them
   if (o.skipFine) return b;  // the caller draws its own last comb (Double comb waved: along a wave)
-  b.comb(dir, fine, { ripple: o.ripple ?? 2.2, plateau: o.plateau }); // fine comb drawn once across the bands: scallops along every band edge, taller than wide (dp 82: ~4.5 mm tongues)
+  b.comb(dir, fine, { ripple: o.ripple ?? DEEP_TONGUE, plateau: o.plateau }); // fine comb drawn once across the bands: scallops along every band edge, ~4.5 mm apart on dp 82 and two to three times as deep as they are wide
   return b;
 };
 
@@ -850,9 +869,9 @@ export const RECIPES: Recipe[] = [
       for (const c of round) b.sprinkleStats(c, b.statsOf(c), { anim: 0.6 });
       return b.drift().scene(); } },
   { name: "Icarus", streaks: "v", group: "Combed", palette: "g216", palettes: ["g216", "g217", "g219", "g220", "g221", "g222"], terms: ["icarus", "whirl"], defaults: { ...D19, ...COMBED_LOOK, viscosity: 0.3 }, note: "Fine nonpareil, then a deep comb drawn down the sheet along a slow arc: nested wing-like crescents (dp 216).",
-    build: (p, pal) => { const b = nonpareilBase(new Builder(p, pal)); b.wavyComb(-90, 14, 22, 260, { alternate: false, ripple: 2.5, L: 1, kernel: "wake" }); /* one deep wide-kernel comb drawn down a slow arc: nested crescents ~14 mm apart, all bowing one way (dp 216) */ return b.drift().scene(); } },
+    build: (p, pal) => { const b = nonpareilBase(new Builder(p, pal), 4, { ripple: 2.2 }); /* the shallower tongues the plain nonpareil was drawn with: the crescent comb below draws them out again, and on dp 216 the crescents are one to two spacings deep, not four */ b.wavyComb(-90, 14, 22, 260, { alternate: false, ripple: 2.5, L: 1, kernel: "wake" }); /* one deep wide-kernel comb drawn down a slow arc: nested crescents ~14 mm apart, all bowing one way (dp 216) */ return b.drift().scene(); } },
   { name: "Cathedral", streaks: "v", group: "Combed", palette: "g218", palettes: ["g218", "g224", "g234", "g242", "g243", "g244"], terms: ["cathedral"], defaults: { ...D19, ...COMBED_LOOK, viscosity: 0.3 }, note: "Nonpareil, then one wide comb with strong pull drawn up the sheet: tall pointed arches (dp 218).",
-    build: (p, pal) => { const b = nonpareilBase(new Builder(p, pal)); b.comb(-90, 55, { ripple: 3.5, L: 1.5, kernel: "wake" }); return b.drift().scene(); } },
+    build: (p, pal) => { const b = nonpareilBase(new Builder(p, pal), 4, { ripple: 2.2 }); /* as Icarus: the 55 mm comb below draws the tongues out again (dp 218) */ b.comb(-90, 55, { ripple: 3.5, L: 1.5, kernel: "wake" }); return b.drift().scene(); } },
   { name: "Wide comb (Arch)", streaks: "v", group: "Combed", palette: "dp274", palettes: ["dp274", "nonpareil19"], terms: ["wide comb", "arch"], defaults: { ...D19, ...COMBED_LOOK, viscosity: 0.3 }, note: "Narrow comb twice horizontally, then a wider comb vertically once.",
     build: (p, pal) => { const b = new Builder(p, pal); turkishBase(b, 2.2); /* the line pitch inside an arch is set by the drop count, not the drop size (the fitter sets the size): dp 191/432 carry 15–20 lines per 25 mm arch, which needs ~0.5 of the measured fragment density, not the 0.07 of a get-gel sheet */ b.comb2(0, 8, { ripple: 2.5, L: 1.5, kernel: "wake" }); /* wake kernel: the 8 mm passes draw the drops into smooth hairlines (dp 191 at native scale: no scallops inside the arches); the arc profile's elliptical heads showed as 8 mm scallop rows */ b.comb(-90, 22, { ripple: 1.2 }); return b.drift().scene(); } },
 
@@ -889,7 +908,7 @@ export const RECIPES: Recipe[] = [
       // columns staggered half a wavelength, so a fan runs head to stem in λ/2. dp 172: S 68, λ 118 (fans every 60 mm per column,
       // staggered); dp 174: S 56, λ 62; dp 173 (at its catalogued 13 cm): S 19, λ 24; dp 495 (a Fern): lines 17 apart, fronds 54.
       const w = pal.wave, S = w?.spacing ?? 74;
-      b.wavyComb(90, S, w?.amp ?? S / 4, w?.len ?? 74, { alternate: true, ripple: 0.45, kernel: "wake", L: 0.5 });   // drawn UP the sheet (user, 2026-09-10: at −90 the fans opened the wrong way once the sharp wake showed the drag)   // combed sharply (user): the tines cut the columns along their wavy paths, the fans between move whole // amplitude S/4: neighbouring lines touch once a wavelength // plateau: the tongues ride into the fan whole; the stretch sits in the stems (dp 172)
+      b.wavyComb(90, S, w?.amp ?? S / 4, w?.len ?? 74, { alternate: true, ripple: 0.45, kernel: "wake", L: 0.5, damp: S / 6 });   // the wake screened at a third of the way to the neighbouring line (the rows interleave, so that line is S/2 away): each tine draws its own column out into a fan and the paint between the fans keeps the nonpareil it was given (user: the drag "limited to just around the comb", the areas between the waves untouched)   // drawn UP the sheet (user, 2026-09-10: at −90 the fans opened the wrong way once the sharp wake showed the drag)   // combed sharply (user): the tines cut the columns along their wavy paths, the fans between move whole // amplitude S/4: neighbouring lines touch once a wavelength // plateau: the tongues ride into the fan whole; the stretch sits in the stems (dp 172)
       return b.drift().scene(); } },
 
   { name: "Peacock", streaks: "v", group: "Combed", palette: "peacock19", palettes: ["peacock19"], terms: ["peacock", "augen"], defaults: { ...D19, ...COMBED_LOOK, viscosity: 0.3 }, note: "Turkish, a one-row comb drawn down and back then across and back, halving, then a two-row comb drawn down in a loose wave: eyes outlined by hair lines with the stone spots inside (Miura; dp 144).",
@@ -916,7 +935,7 @@ export const RECIPES: Recipe[] = [
       // Square rhombuses (user): the zigzag legs run at 45° to the travel, so the wavelength is four times the amplitude
       // and the two rows, half a period apart into squares standing on a corner. Sets 48 mm apart (adjacent lines
       // 24 mm, amplitude 12, wavelength 48): 48 mm squares, between dp 144's 44 mm width and 54–57 mm row height.
-      b.wavyComb(90, 44, 11, 76, { alternate: true, ripple: 0.35, plateau: 6, shape: "triangle" });   // stacked 60° rhombuses (user, 2026-09-10: back from the squares): legs at 30° to the travel, λ = 4·amp·√3, cells 44 wide × 76 tall on dp 144 (43.8 × 54–57 measured, the rows stacked); drawn up; ripple 0.35, less drag than the 0.5 of before (user)
+      b.wavyComb(90, 44, 11, 76, { alternate: true, ripple: 0.35, kernel: "wake", L: 0.5, damp: 44 / 6, shape: "triangle" });   // the wake screened at a third of the way to the neighbouring row's line (user): the tines cut along their zigzag paths and the eyes between them move whole, where the undamped pull swept the whole sheet into one drift   // stacked 60° rhombuses (user, 2026-09-10: back from the squares): legs at 30° to the travel, λ = 4·amp·√3, cells 44 wide × 76 tall on dp 144 (43.8 × 54–57 measured, the rows stacked); drawn up; ripple 0.35, less drag than the 0.5 of before (user)
       return b.drift().scene(); } },
 
   { name: "Serpentine", streaks: "h", group: "Combed", palette: "dp164", palettes: ["dp164", "serpentine19", "dp87"], terms: ["serpentine", "waved", "wave"], defaults: { ...D19, ...COMBED_LOOK, viscosity: 0.3 }, note: "Turkish, a one-row comb drawn down and back then across and back, halving, then a slightly wider comb drawn once down the sheet in wavy lines like a snake's track (Miura; dp 69, 164).",

@@ -364,12 +364,23 @@ void invComb(inout Trace t, vec4 a, vec4 b, vec4 c, vec4 d) {
     sum = (1.0 - h) * P + h * E;
     dsum = (1.0 - h) * dP + h * dE;
   } else {
+    // d.z = ell / L, the wake screened at the length ell (0: the free logarithm, felt right across the gap). A rod drawn
+    // through a film floating on a bath drags the film with it, but the water beneath takes up the momentum, so past a
+    // screening length the free 2-D Stokes flow (log, unbounded) crosses over to a decaying far field -- the
+    // Saffman-Delbrueck picture, the same damping the stylus twirl uses. The regularised form of that crossover is
+    // K = ½ ln((ell² + d²)/(L² + d²)): the log core within L < d < ell, falling off as 1/d² beyond ell, so a tine pulls
+    // the paint near its own path and leaves the middle of the gap where it was (user: a comb should drag "just around
+    // the comb", the cells between the waves untouched).
+    float a2 = d.z * d.z;
     float kn = floor(n / s + 0.5);
     for (int j = -4; j <= 4; j++) {
       float u = (n - (kn + float(j)) * s) / L;
       float w = 1.0 + u * u;
-      sum -= 0.5 * log(w);
-      dsum -= u / (w * L);
+      float K, dK;
+      if (d.z > 0.0) { float wa = a2 + u * u; K = 0.5 * log(wa / w); dK = u / wa - u / w; }
+      else { K = -0.5 * log(w); dK = -u / w; }
+      sum += K;
+      dsum += dK / L;
     }
   }
   t.S -= b.x * (sum - c.x) * D;
