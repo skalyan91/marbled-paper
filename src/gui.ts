@@ -218,7 +218,7 @@ export function makeGui(s: Settings, onChange: () => void, onRebuild: () => void
   dry.add(s, "hairMix", 0, 1, 0.05).name("Hairline mingling").onChange(onChange);   // hair-fine films bleed into each other on the paper: pigment mixture, not an optical average
   dry.add(s, "hairWidth", 0.05, 0.6, 0.01).name("Mingling width (mm)").onChange(onChange);   // how far each colour is pushed so its typical rendered pixel meets the palette colour
   dry.add(s, "bleed", 0, 0.6, 0.01).name("Edge bleed (mm)").onChange(onChange);
-  dry.add(s, "edgeWobble", 0, 1.5, 0.01).name("Edge grain (×0.3 mm)").onChange(onChange);
+  dry.add(s, "edgeWobble", 0, 1.5, 0.01).name("Edge grain (×0.35 mm)").onChange(onChange);
   dry.add(s, "edgeDark", 0, 0.4, 0.01).name("Edge darkening").onChange(onChange);
 
   const anim = gui.addFolder("Animation");

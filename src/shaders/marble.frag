@@ -189,7 +189,7 @@ void candidate(inout Trace t, inout vec2 g, inout mat2 Jg, inout bool stop, ivec
         vec2 gw = Jg * vec2(-t.v.y, t.v.x);                // cells per px across the footprint
         float gwp = length(gw - dot(gw, gvu) * gvu);       // its component across the interval
         float eW = (r - dPerp) / max(gwp, 1e-6);           // outline distance across, px (>0 inside)
-        float alphaW = A2 < 1e-12 ? 1.0 : smoothstep(-bw, bw, eW + uBleed.y * 0.3 * uPxPerMm * t.fibre);   // the outline displaced along the grain, ±0.3 mm × feathering
+        float alphaW = A2 < 1e-12 ? 1.0 : smoothstep(-bw, bw, eW + uBleed.y * 0.35 * uPxPerMm * t.fibre);   // the outline displaced along the grain, ±0.3 mm × feathering
         claimed = true; wgt = (cb - ca) * alphaW;
         t.lost += (cb - ca) * (1.0 - alphaW);            // what lies beside the streak: unresolved, shown as the sheet mean
       } else t.lost += cb - ca;                          // a chord too thin to trace: still paint, not bare ground
@@ -201,7 +201,7 @@ void candidate(inout Trace t, inout vec2 g, inout mat2 Jg, inout bool stop, ivec
     }
   } else {
     // narrow footprint: analytic edge coverage across the outline, blurred by the bleed
-    ePx += uBleed.y * 0.3 * uPxPerMm * t.fibre;   // the outline follows the paper's grain (see paperColor): the displaced distance is the one the rim shading sees too
+    ePx += uBleed.y * 0.35 * uPxPerMm * t.fibre;   // ±0.35 mm × the control (0.6 by default): the scans' outlines deviate 0.14–0.25 mm rms from a 0.15 mm smoothing   // the outline follows the paper's grain (see paperColor): the displaced distance is the one the rim shading sees too
     float alpha = (uSamples > 0 && gradD < 0.25 * r) ? smoothstep(-bw, bw, ePx) : (inside ? 1.0 : 0.0);
     if (t.nh == 0 && alpha > 0.0) { claimed = true; wgt = alpha; }
     else if (t.nh > 0 && alpha > 0.0) { claimed = true; wgt = alpha * (1.0 - t.ws[0]); }   // the second piece keeps its own soft edge
@@ -531,7 +531,7 @@ float stretchOf(mat2 J) {
 float lodOf(mat2 J) { float m = max(length(J[0]), length(J[1])); return log2((m < 1e6 && m > 0.0) ? max(m, 1e-6) : 1e6); }
 
 // Paper surface: returns colour; writes fibre (−1..1, anisotropic streaks) and tooth (0..1, hollows = 0)
-vec3 paperColor(vec2 P, float soft, float lodScr, out float fibre, out float tooth) {
+vec3 paperColor(vec2 P, float soft, float lodScr, out float fibre, out float tooth, out float grain) {
   vec2 q = P * 0.02;
   float f1 = tnoise(q * vec2(0.7, 4.0), lodFor(lodScr, 0.08)).a, f2 = tnoise(q * vec2(4.0, 0.7) + 0.37, lodFor(lodScr, 0.08)).a;
   float fib = (f1 + f2) - 1.0;
@@ -547,9 +547,18 @@ vec3 paperColor(vec2 P, float soft, float lodScr, out float fibre, out float too
   // The grain a paint edge follows: on the 400–600 dpi scans (dp 80, 97, 102) every outline is ragged at 0.1–0.4 mm,
   // the paint having crept along the fibres it met, with a streaky anisotropy along the fibre direction; nothing of the
   // 3–70 mm wander the old term carried, which was invisible at the bleed's scale. Fixed physical scales (0.12 and 0.35 mm).
-  float g1 = tnoise(P * vec2(3.0, 8.0) + 0.13, lodFor(lodScr, 8.0)).r - 0.5;
-  float g2 = tnoise(P * vec2(1.2, 3.0) + 0.61, lodFor(lodScr, 3.0)).g - 0.5;
-  fibre = clamp(g1 * 2.4 + g2 * 1.6, -1.0, 1.0);
+  // Sampled so that the texture's *texels* are the fibre features (the red channel is white noise per texel; a repeat
+  // of 256 texels over 25 mm puts one texel at 0.1 mm), which the mip chain then averages correctly at any zoom. The
+  // earlier sampling at 3–16 cycles per mm mapped the repeat to 0.06–0.3 mm and read a near-constant 4-texel mip.
+  float g0 = tnoise(P * vec2(0.025, 0.055) + 0.29, lodFor(lodScr, 0.055)).r - 0.5;   // 0.1 mm fuzz, streaked 2:1
+  float g1 = tnoise(P * vec2(0.012, 0.02) + 0.13, lodFor(lodScr, 0.02)).r - 0.5;     // 0.2–0.35 mm
+  float g2 = tnoise(P * vec2(0.006, 0.01) + 0.61, lodFor(lodScr, 0.01)).r - 0.5;     // 0.4–0.7 mm
+  fibre = clamp(g0 * 1.0 + g1 * 1.6 + g2 * 1.2, -1.0, 1.0);   // the edge's displacement: fibre fuzz and streaks together, so the fringe is ragged, not lumpy
+  // The take-up of a film into the fibre mat: the paint is absorbed unevenly, thicker in the hollows and where the
+  // fibres are dense, so the reflectance of every colour is speckled at the fibres' own scale. On the 400–600 dpi
+  // scans the log-reflectance inside a film has an rms of 0.09–0.10 below 0.2 mm and 0.04–0.07 per octave from 0.2
+  // to 1.6 mm, 0.15–0.21 in all (dp 97, 102). Zero mean, so the median colour the calibration matches is unchanged.
+  grain = 0.55 * g0 + 0.5 * g1 + 0.3 * g2 + 0.3 * floc + 0.25 * form;   // weights set so a 600 ppi render of dp 102 gives the scan's band rms (0.1 mm ~0.07, 0.2–1.6 mm ~0.04 per octave)
   tooth = clamp(0.5 + 1.2 * floc + 0.9 * form + 0.8 * fuzz + 0.35 * fib + 0.3 * fine + 0.3 * mid + 0.35 * g1 + 0.25 * g2, 0.0, 1.0);   // and the fibre-scale grain: the film's take-up is stippled at 0.1–0.3 mm on the scans, not only mottled at 0.5–1 mm
   vec3 c = uPaper.rgb * (1.0 + 0.08 * fib + 0.05 * fine + 0.04 * mid + 0.06 * floc + 0.05 * form + 0.04 * fuzz);
   // laid and chain lines of hand-made paper (visible where the sheet is thinner)
@@ -685,7 +694,7 @@ float transferShade(vec2 P, float lodScr) {
 
 struct Shaded { vec3 rgb; float cov; float stretch; };
 
-Shaded shadePattern(Hit h, vec2 P, vec3 paper, float lodScr, float tooth, int gf) {
+Shaded shadePattern(Hit h, vec2 P, vec3 paper, float lodScr, float tooth, float grain, int gf) {
   Shaded s;
   s.stretch = 1.0;
   s.cov = 0.0;
@@ -704,6 +713,7 @@ Shaded shadePattern(Hit h, vec2 P, vec3 paper, float lodScr, float tooth, int gf
       s.cov = pig[gf].x * mix(0.96 + 0.04 * tooth, 1.0, gfilm * 0.6) * transferShade(P, lodScr);
       s.cov *= (1.0 - uPaperTex.z * 0.08 * (0.5 - tooth)) * (1.0 - uSurface.x * smoothstep(0.78, 0.92, tooth));
       s.rgb *= 1.0 - uPaperTex.z * 0.18 * (tooth - 0.5);
+      s.rgb *= exp(uPaperTex.z * 1.6 * grain);   // absorbed unevenly into the fibres: film thickness varies at the fibres' scale (Beer–Lambert)
       s.stretch = gsig;
     }
     return s;
@@ -718,8 +728,8 @@ Shaded shadePattern(Hit h, vec2 P, vec3 paper, float lodScr, float tooth, int gf
   float gA = tnoise(h.S * 0.45 + float(h.layer) * 0.13, lodFor(lodMat, 0.45)).r;
   float gB = tnoise(h.S * 0.12, lodFor(lodMat, 0.12)).a;
   float g = 0.6 * gA + 0.4 * gB;
-  float grain = uDry.x * pg.y;
-  float cov = pg.x * clamp(0.95 + 0.05 * film + (g - 0.5) * grain * (1.0 - film) * 0.3, 0.0, 1.0);
+  float pgrain = uDry.x * pg.y;   // pigment grain (the Pigment grain control × the pigment's own)
+  float cov = pg.x * clamp(0.95 + 0.05 * film + (g - 0.5) * pgrain * (1.0 - film) * 0.3, 0.0, 1.0);
   // absorption into the sheet: the film takes unevenly on the fibre relief (stretch-independent). Mostly a density
   // modulation (darker where it pools), only a little bare paper: see the ground film above.
   cov *= 1.0 - uPaperTex.z * 0.08 * (0.5 - tooth);
@@ -728,6 +738,7 @@ Shaded shadePattern(Hit h, vec2 P, vec3 paper, float lodScr, float tooth, int gf
   cov *= 1.0 - uSurface.x * smoothstep(0.78, 0.92, tooth);
   // granulation: heavy pigments settle in the hollows (darker), pale ones stay even
   base *= 1.0 - uPaperTex.w * pg.y * 0.25 * (tooth - 0.5);
+  base *= exp(uPaperTex.z * 1.6 * grain);   // absorbed unevenly into the fibres (see paperColor): every colour speckled at 0.1–1 mm
   // pigment texture (slight value variation, stronger for earths)
   base *= 1.0 + (0.10 + 0.12 * pg.y) * (gB - 0.5);
   cov *= styleCoverage(h, base, lodMat, sig);
@@ -770,11 +781,11 @@ vec3 compose(vec3 under, Shaded s, float alpha) {
 
 // Full result of one op chain at P: the weighted pieces of the pixel footprint, with wet-edge
 // mingling where two paints meet inside the footprint.
-Shaded shadeChain(Trace t, vec2 P, vec3 paper, float lodScr, float tooth, int gf, out vec3 rgbOut) {
+Shaded shadeChain(Trace t, vec2 P, vec3 paper, float lodScr, float tooth, float grain, int gf, out vec3 rgbOut) {
   Shaded ps[MAXH];
   for (int k = 0; k < MAXH; k++) {
     if (t.ws[k] <= 0.0) { ps[k].cov = 0.0; ps[k].rgb = paper; ps[k].stretch = 1.0; continue; }
-    ps[k] = shadePattern(t.hs[k], P, paper, lodScr, tooth, gf);
+    ps[k] = shadePattern(t.hs[k], P, paper, lodScr, tooth, grain, gf);
   }
   for (int k = 0; k + 1 < MAXH; k++) {
     if (t.ws[k] <= 0.0 || t.ws[k + 1] <= 0.0) continue;
@@ -830,8 +841,8 @@ void main() {
   float mmPerPx = 1.0 / uPxPerMm;
   float soft = uTransfer2.w;
   float lodScr = log2(mmPerPx);
-  float fibre, tooth;
-  vec3 paper = paperColor(P, soft, lodScr, fibre, tooth);
+  float fibre, tooth, grain;
+  vec3 paper = paperColor(P, soft, lodScr, fibre, tooth, grain);
 
   Trace t = trace(P, mmPerPx, fibre, 0, uOpCount);
   Hit h = t.hs[0];
@@ -880,17 +891,17 @@ void main() {
 
   vec3 dummy;
   int gfTop = int(uDry.z + 0.5) - 1;
-  Shaded top = shadeChain(t, P, paper, lodScr, tooth, gfTop, dummy);
+  Shaded top = shadeChain(t, P, paper, lodScr, tooth, grain, gfTop, dummy);
   if (uDebug == 4) { fragColor = vec4(vec3(top.cov), 1.0); return; }
   if (uDebug == 9) { fragColor = vec4(t.ws[0], t.ws[1], t.ws[2], 1.0); return; }
-  if (uDebug == 10) { Shaded p0 = shadePattern(t.hs[0], P, paper, lodScr, tooth, gfTop); fragColor = vec4(p0.cov, t.hs[0].hit ? 1.0 : 0.0, float(gfTop + 1) / 32.0, 1.0); return; }
+  if (uDebug == 10) { Shaded p0 = shadePattern(t.hs[0], P, paper, lodScr, tooth, grain, gfTop); fragColor = vec4(p0.cov, t.hs[0].hit ? 1.0 : 0.0, float(gfTop + 1) / 32.0, 1.0); return; }
   if (uDebug == 11) { float gsig = stretchOf(t.hs[0].J); float gfilm = pow(clamp(uDry.y / gsig, 0.0, 1.0), 0.35); fragColor = vec4(gfTop >= 0 ? pig[gfTop].x : 0.0, transferShade(P, lodScr), mix(0.75 + 0.25 * tooth, 1.0, gfilm * 0.6), 1.0); return; }
 
   vec3 under = paper;
   if (uCoated > 0.5 && gfTop >= 0) under = mix(paper, col[gfTop].rgb * (0.96 + 0.08 * (tnoise(P * 0.05, lodFor(lodScr, 0.05)).g - 0.5)), pig[gfTop].x);
   if (uUnderMode != 0) {
     Trace tu = trace(P, mmPerPx, fibre, uOpCount, uOpCount2);
-    Shaded u = shadeChain(tu, P, paper, lodScr, tooth, uGroundUnder, dummy);
+    Shaded u = shadeChain(tu, P, paper, lodScr, tooth, grain, uGroundUnder, dummy);
     under = compose(paper, u, 1.0);
   }
   vec3 c;

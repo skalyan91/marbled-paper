@@ -289,11 +289,17 @@ The gall-and-oil discs of a Schrottel are pocked with eyes: dark cores in paper 
 shower of small ones and a sparser hierarchy of large ones, drawn as features of each disc
 (they move with it and never fall on the black channels between discs).
 
-No drop has a smooth outline. On the 400–600 dpi scans every paint edge is ragged at
-0.1–0.4 mm, the paint having crept along the fibres it met: the outline is displaced by
-a fibre-scale, streaky grain (0.12 and 0.35 mm, anisotropic along the fibre direction;
-the "Edge grain" control sets the amplitude, ±0.3 mm at 1), and the same grain stipples
-the film's take-up inside the drop.
+The paint is taken up into the fibre mat unevenly. On the 400–600 dpi scans the
+log-reflectance inside any film is speckled with an rms of about 0.09 below 0.2 mm and
+0.04 per octave from 0.2 to 1.6 mm (dp 97, 102): the film lies thicker in the hollows and
+where the fibres are dense. The render carries a fibre-scale grain in paper space (fuzz at
+0.1 mm and streaks at 0.2–0.7 mm, anisotropic along the fibre direction, sampled so that
+the noise texels are the fibres and the mip chain averages them at any zoom) and applies
+it to every colour as a film-thickness term, exp(k·grain), with k set by the Paper tooth
+control; a 600 dpi render of dp 102 now measures 0.074 / 0.033 / 0.035 / 0.038 in the
+bands the scan measures 0.087 / 0.042 / 0.043 / 0.039. No drop has a smooth outline
+either: the same grain displaces every paint edge (the "Edge grain" control, ±0.35 mm at
+1), as the paint crept along the fibres it met.
 
 Colours are matched on screen, not only in the palette. A thrown film is opaque (the paper
 shows in gaps, never through the colour; the fibre relief modulates the film's density
