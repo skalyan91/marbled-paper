@@ -361,7 +361,7 @@ function uploadScene(scene: Scene, palette: Palette) {
   const layerStyle = new Float32Array(MAX_LAYERS * 4);
   for (const o of [...scene.ops, ...underOps]) {
     if (o.type !== 1 || o.p[0] >= MAX_LAYERS) continue;
-    layerStyle.set([o.p[2], o.p[9] ?? 1, o.p[10] ?? 0, o.p[12] ?? 0], o.p[0] * 4);   // .w: the second style parameter (THIN: pushed radius / film radius)
+    layerStyle.set([o.p[2], o.p[9] ?? 1, o.p[10] ?? 0, 0], o.p[0] * 4);
   }
   gl.uniform4fv(uni.uLayerStyle, layerStyle);
 

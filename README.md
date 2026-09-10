@@ -285,9 +285,15 @@ severed while the drop beside it barely moves. The tongues a single fine pass le
 semi-ellipses about 0.7 spacings deep on parallel flanks, measured on the scans, with
 cusped valleys between. Waved combs keep their measured wavelength per sheet.
 
-The gall-and-oil discs of a Schrottel are a thin film: what lies beneath (the black ground
-and the veins the film pushed to its rim) shows through at 60 %, while the eyes and their
-halos are opaque paint.
+The gall-and-oil discs of a Schrottel are pocked with eyes: dark cores in paper halos, a
+shower of small ones and a sparser hierarchy of large ones, drawn as features of each disc
+(they move with it and never fall on the black channels between discs).
+
+No drop has a smooth outline. On the 400–600 dpi scans every paint edge is ragged at
+0.1–0.4 mm, the paint having crept along the fibres it met: the outline is displaced by
+a fibre-scale, streaky grain (0.12 and 0.35 mm, anisotropic along the fibre direction;
+the "Edge grain" control sets the amplitude, ±0.3 mm at 1), and the same grain stipples
+the film's take-up inside the drop.
 
 Colours are matched on screen, not only in the palette. A thrown film is opaque (the paper
 shows in gaps, never through the colour; the fibre relief modulates the film's density
