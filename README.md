@@ -301,6 +301,25 @@ bands the scan measures 0.087 / 0.042 / 0.043 / 0.039. No drop has a smooth outl
 either: the same grain displaces every paint edge (the "Edge grain" control, ±0.35 mm at
 1), as the paint crept along the fibres it met.
 
+The palette's paper colour is read off the scan, so it is the aged paper already; the
+ageing control only mottles it in patches and no longer darkens the whole sheet a second
+time. The gall shower that ends a stone throw opens small, nearly white spots, ~0.5 per
+cm² of ~1.2 mm (dp 370 at native resolution: 0.39 per cm² of 0.7–2 mm above L 200).
+
+Every colour's drop sizes are a shifted Weibull whose shape is fitted per sheet, not assumed:
+the render's own fragments are measured (connected components of a flat-id pass) and the
+shape is moved until the 90th percentile stands to the median as it does on the scan, with
+the median size refitted for coverage between steps. Over 375 sheets the fitted shape has a
+median of 1.13, a tenth of colours below 0.5 (heavy-tailed, a few giants among many small
+drops) and a tenth at 3 (drops all of one size).
+
+Whether drops of different colours seek each other out was measured across the collection
+and the answer is no: the cross pair-correlation of drops of one colour around drops of
+another is 0.99 at half a spacing, 0.98 at one and 0.97 at two, and the mean distance to
+the nearest drop of another colour is slightly longer than chance. The only cross-colour
+signal is at contact scale and it is sheet-specific (a third of sheets, dp 370 among them).
+The measurements are kept in `crosscluster.generated.ts`; no attraction is modelled.
+
 Colours are matched on screen, not only in the palette. A thrown film is opaque (the paper
 shows in gaps, never through the colour; the fibre relief modulates the film's density
 instead), and before a sheet is drawn each colour is rendered flat, the median pixel of its

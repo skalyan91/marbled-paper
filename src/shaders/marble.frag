@@ -569,7 +569,10 @@ vec3 paperColor(vec2 P, float soft, float lodScr, out float fibre, out float too
     float vis = clamp(1.0 - lodLaid * 0.7, 0.0, 1.0);   // fade when the pitch is under a pixel
     c *= 1.0 + vis * (0.035 * (laid - 0.5) + 0.03 * chain);
   }
-  vec3 aged = c * vec3(0.90, 0.82, 0.68);
+  // The palette's paper colour is read off the scan, i.e. it is the aged paper already: the ageing here only mottles it
+  // (a little yellower and darker in patches), it does not darken the whole sheet again (dp 370: the bare-paper dots are
+  // (234, 219, 199) on the scan, the palette paper #E6D8BC, and the old ×(0.90, 0.82, 0.68) made them tan)
+  vec3 aged = c * vec3(0.97, 0.94, 0.88);
   c = mix(c, aged, uPaper.a * (0.35 + 0.65 * smoothstep(-0.2, 0.3, low)));
   if (soft > 0.5) c = mix(c, vec3(0.97, 0.96, 0.93), 0.6);
   return c;
