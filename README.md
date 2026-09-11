@@ -52,7 +52,7 @@ Operators (`src/shaders/marble.frag`, authored forward in `src/recipes.ts`):
 
 | op | forward map | inverse used by the shader |
 |---|---|---|
-| drop of radius r at C (an ellipse: the drop landed moving) | P ↦ C + (P−C)·√(1 + r²/‖P−C‖²) | P ↦ C + (P−C)·√(1 − r²/‖P−C‖²), faded out between 1 and 1.5 cells, drops looked up in a 3×3 / 5×5 / 7×7 cell neighbourhood |
+| drop of radius r at C (an ellipse: the drop landed moving) | P ↦ C + (P−C)·√(1 + r²/‖P−C‖²) | P ↦ C + (P−C)·√(1 − r²/‖P−C‖²) where the drop can be found, in a 3×3 / 5×5 / 7×7 cell neighbourhood, faded out between 1 and 1.5 cells; beyond that the same push, summed over every drop of the layer into a coarse grid once a frame |
 | comb (infinite train of parallel tines, spacing s) | P ↦ P + z·K(n − o)·M | two regimes, mean drag removed. *Arc*: the paint pushed ahead of each tine forms a front that bows between the neighbouring tines and meets the next in a cusp, K = √(1 − 4f² + ε) with f the position in the gap: rounded tongues, cusped valleys, flanks drawn into hair lines (nonpareil, dp 82; the arches of a wide comb). *Wake*, for widely set teeth pulled hard: the wake has nearly no width; the drag rises towards the tine's path like a logarithm with a core of half a millimetre and is screened beyond ℓ by the water under the film, K = Σ ½ ln((ℓ² + d²)/(L² + d²)) over the nine nearest tines. A line crossing the stroke becomes a hyperbola asymptotic to the path; drawn across and back with halving, the lines accumulate along each path into a straight column of near-parallel lines (the quill) joined by sigmoids of opposite sense in alternate gaps, crossing the gap at 60–70° midway (Feather, dp 29). The pull is set by that angle: ~470 mm at the tine for 55 mm tines |
 | sinusoidal shear | x ↦ x − A·sin(k·y + φ) | exact; also conjugates combs into wavy combs |
 | vortex (stylus swirl) | rotate about C by z·e^{−max(0,d−r)/L}/max(d,core) | rotate by the opposite angle |
@@ -97,15 +97,28 @@ three times as deep as they are wide (dp 82, 305), twice what the render drew be
 whose own tongue length was measured keep it, and so do the patterns that comb the tongues
 again afterwards (Icarus, Cathedral).
 
-The fine comb's *pitch* is measured too, and was the other half of the same question: on the
-scans a plain nonpareil's tongues repeat every 7.6–8.8 mm (the autocorrelation of the sheet at
-true scale: dp 82, 289, 300, 21, 284), where the recipe drew them 4 mm apart, so a tongue is now
-8 mm wide and 35 mm deep instead of 4 by 9. How far a pattern's bands actually swing is the
-measurement that settles this: the coherence-weighted spread of the structure-tensor orientation
-over a tile, which runs 24–72° on the scans. Against it, dp 305 went from 18° to 42° (its scan
-41°), dp 82 from 29° to 44° (62°), dp 21 to 47° (48°), dp 75 to 35° (32°). Deepening the get-gel
-itself instead overshot every sheet that shows one, so a two-pass comb keeps the pull it is
-authored with.
+The bath is dragged before it is combed. A rake drawn once the length of the bath pulls every
+drop into a streak three times its own length, so what the get-gel then cuts is a field of bands
+rather than a field of blobs — which is how a nonpareil's colours run unbroken across the sheet.
+The base can therefore throw drops of nearly the sheet's own size and number (a third of the
+measured density, where it needed a fourteenth before) and let the drag make the bands, instead
+of standing in for the drag with drops six times too big.
+
+What a nonpareil wants, beyond that, is not deeper tongues but a steeper cut. A nonpareil scan carries two fine
+repeats, about 2.5 mm and about 8 mm (autocorrelation at true scale on dp 82, 289, 300, 21, 284),
+and drawing the comb at the 8 mm one only made the whole pattern too big; the tines stay 4 mm
+apart and the tongues 4.4 spacings deep. The steepness is in the get-gel under them, whose wake
+is screened at an eighth of its spacing instead of the default third, so each tine draws the
+paint into its own path within a couple of millimetres and the band between two tines rides along
+whole. The measurement is the share of the sheet whose bands run across the drag rather than
+along it, coherence-weighted: dp 305's scan reads 0.20 and its render 0.09 before, 0.19 after;
+dp 82's scan 0.24 against 0.12 and 0.08. A sixteenth notched the bands harder than any scan
+does. That screening is the nonpareil base's own and not the
+default, because a comb pulled the length of the bath wants the opposite: at a sixteenth a
+Feather's quill columns broke into notched bands, where at a third dp 29 renders 0.02 against its
+scan's 0.02. Deepening the get-gel's pull instead of sharpening it overshot every sheet that
+shows one — dp 393 rendered 51° of orientation spread against its scan's 35°, and dp 15's masses
+went to ribbons — so a two-pass comb keeps the pull it is authored with.
 
 A tine's wake is screened. The free two-dimensional Stokes drag of a rod is logarithmic and so
 unbounded, felt right across the gap; a film floating on a bath instead gives its momentum up to
@@ -196,9 +209,11 @@ given, where the free logarithm swept whole sheets into one drift.
   parameter is deduced from the finished sheet: the palette's measured spot statistics,
   inflated by the stretch the later combing gave the bands, and the coverage fitter drives
   each colour's size. Peacock is a Turkish under one two-row comb drawn down the sheet in a
-  zigzag (88 mm sets, 190 mm wavelength) and nothing else. The plumes it quilts the sheet into
-  are half a spacing wide and half a wavelength tall, and the scans' measure 40–50 mm across and
-  90–110 mm tall (dp 144 at 200 mm; dp 424, 434, 437, 438, 464 at 90 mm). Miura, as quoted by the
+  zigzag and nothing else. The plumes it quilts the sheet into are half a spacing wide and half a
+  wavelength tall, and the lattice is each sheet's own, read off a 90 mm square of its scan at
+  true scale: dp 144's plumes are 33 by 45 mm (66 mm sets on a 90 mm wave), where the 90 mm
+  samples dp 424 and 464 carry 40–45 mm plumes taller than the sheet itself (88 mm sets on a
+  190 mm wave, the fallback for a sheet not yet measured). Miura, as quoted by the
   catalogue, puts two straight one-row passes before that wave, drawn down and back then across
   and back; the sheets say otherwise, since with them the stone spots only lobe into blobs, and a
   fine straight get-gel in their place draws the colours to hair and to mud. Bouquet is the same
@@ -245,7 +260,10 @@ given, where the free logarithm swept whole sheets into one drift.
   show inside every colour (the sheets in the collection were mostly cover papers). Heavy
   pigments granulate (settle darker in the hollows), pale ones stay even.
 - Wear: on a handled cover the raised fibres rub bare, leaving pale specks on every colour
-  (the "Wear" control).
+  (the "Wear" control). Those specks open the film to the paper, so on a dark colour they are
+  the loudest thing on the sheet: at the old default they made a black film twice as speckled
+  as the scans' below 0.2 mm (dp 177, 455), and the default is now the 0.06 that brings it to
+  parity.
 - Where wet colours meet, the edge is blurred over a bleed width (default 0.12 mm) that
   wobbles with the fibres; inside the bleed zone the two pigments mingle (subtractive mix)
   and pile up into a slightly darker line.
@@ -306,10 +324,26 @@ drops into the vein colour of the sheet — the catalogue's own account of the p
 colors for the latter thrown inks"). Nothing about that is a free parameter: a colour ending
 at a fraction *f* of a sheet whose later colours end at *F* was thrown over *f* / (1 − *F*)
 of the bath, and the shear it has taken is set by how much paint was thrown over it
-afterwards. The drop's own far field carries that shear, so it is no longer cut off at one
-cell: every layer's displacement now reaches a cell and a half, which costs nothing (the
-drops are looked up in the same neighbourhood) and adds a tenth to the elongation of the
-early colours.
+afterwards. The drop's own far field carries that shear, and it is no longer cut off.
+
+A pixel finds a drop only in the handful of cells the trace looks at, so every push stopped a
+cell and a half from its drop: four or five radii for a fine shower, but under two radii for
+the large drops of a dominant colour, which do most of the pushing, and their neighbours were
+left sitting apart in a broad ground instead of meeting along the thin veins the sheets show.
+Beyond a cell the sum of the push over a layer is smooth, so it is taken analytically: the
+trace keeps the exact map where it can see the drop, and the rest of the push of every drop of
+the layer is summed once a frame into a coarse grid of about half a cell (`src/shaders/far.frag`)
+and read back, with its shear, where the layer acts. The two halves are complementary, so the
+push of a drop is exact beside it, analytic away from it, and continuous in between; the sum
+is cut off at four cells, beyond which an untruncated reverse-trace shows nothing left to
+gain. It is read after the layer's own drops have been looked up, since the tail of a push is
+not area-preserving by itself and a hit test made after it would read the discs as larger than
+they are. One layer of the eight is re-summed per frame (a drop takes eight seconds to cross a
+cell), which costs about a twentieth of the frame. Measured against the scans, the elongation by
+laying position goes from 0.97 / 0.98 / 1.13 of the sheets' own to 0.99 / 1.01 / 1.10 over dp 370,
+80, 122, 129, 372 and 447, and each sheet's spread about its own scan narrows with it. What the eye
+sees at life size is the cells of a dominant colour pressed together along flattened contacts, with
+the ground drawn between them into long thin veins instead of lying round them as a broad field.
 
 What a drop carries before any of that is the ellipse it landed as. Flicked off the brush it
 arrives with the speed of the throw and spreads along its flight, and the measurements say so:
@@ -341,8 +375,18 @@ log-reflectance inside any film is speckled with an rms of about 0.09 below 0.2 
 0.04 per octave from 0.2 to 1.6 mm (dp 97, 102): the film lies thicker in the hollows and
 where the fibres are dense. The render carries a fibre-scale grain in paper space (fuzz at
 0.1 mm and mottle at 0.25 and 0.5 mm, sampled so that the noise texels are the fibres and
-the mip chain averages them at any zoom) and applies it to every colour as a film-thickness
-term, exp(k·grain), with k set by the Paper tooth control. That grain is isotropic, as the
+the mip chain averages them at any zoom) and applies it to each colour as a film-thickness
+term, exp(k·grain·od), with k set by the Paper tooth control and od the film's own optical
+density against the paper. That last factor is Beer–Lambert: a given *relative* change of
+thickness changes the reflectance in proportion to how much the film darkens the sheet at
+all, so a black is coarsely speckled and a cream, barely darker than the paper under it,
+shows almost nothing. The scans say so — at 10–11 px/mm the band rms inside a film runs
+0.045–0.054 where od ≥ 1.4 and 0.007–0.016 where od ≤ 0.8 — and giving every colour the
+same amplitude, which is what the darks the term was calibrated on wanted, made every pale
+film two to six times too grainy (over 21 colours of dp 25, 80, 81, 97, 102, 177 and 455 the
+render now stands at 0.85 and 1.03 times the scans on the darker half of the colours and
+1.03 and 1.11 on the paler half, at 0.1 and 0.2 mm). The same density factor scales the
+relief's other two effects on a film, the tooth take-up and the granulation. That grain is isotropic, as the
 scans' is: measured down against across the sheet, a scan's gradient rms runs 0.85–1.05 and
 its autocorrelation at 0.2 mm is the same on both axes, where the render's grain had been
 stretched 1.3–1.5:1 because each octave was sampled at half the frequency across that it used
@@ -354,8 +398,14 @@ measured the same way and was half again too rough above the fibres (1.37/1.54/1
 at 0.2/0.4/0.8 mm over dp 25, 81, 177, 453, 455, now 1.07/1.21/1.23): its amplitudes are lower,
 and the smooth noise channels take a coarser mip than the white-noise one, since their finest
 cell is two texels and a sheet at life size gritted up once a pixel spanned more than one. No drop has a smooth outline
-either: the same grain displaces every paint edge (the "Edge grain" control, ±0.35 mm at 1),
-as the paint crept along the fibres it met. How far it creeps is measured, not assumed: for
+either: the same grain displaces every paint edge (the "Edge grain" control, up to ±0.79 mm
+at 1), as the paint crept along the fibres it met. An outline wanders, though; it does not
+dither, so each octave of that displacement is weighted in proportion to its own length and
+every one of them tilts the edge by the same small slope. Weighted the other way the finest
+octave alone moved the edge by ±0.12 mm with a fresh value every screen pixel, and at life
+size every outline came out as a millimetre-wide band of dust while a comb-drawn film a
+third of a millimetre wide dissolved into speckle (dp 177 and dp 25, beside their scans at
+true scale). How far it creeps is measured, not assumed: for
 every colour of every sheet the outline's deviation from a smoothed version of itself is
 measured on the scan (median 0.19 mm rms at a 0.6 mm smoothing) and drives that layer's
 displacement, and the same masks give each colour's edge width (how far the colour fades
@@ -438,6 +488,7 @@ part of this repository because they operate on the collection's images.
 - `src/gui.ts` — panel, per-pattern sheet list
 - `src/ops.ts` — op encoding shared with the shader
 - `src/shaders/marble.frag` — the simulation and shading
+- `src/shaders/far.frag` — the push of a drop layer from beyond the trace's lookup, baked once a frame
 
 ## Licence
 

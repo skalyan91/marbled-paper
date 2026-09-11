@@ -1,8 +1,9 @@
 import fragSrc from "./shaders/marble.frag?raw";
 import vertSrc from "./shaders/fullscreen.vert?raw";
 import interleaveSrc from "./shaders/interleave.frag?raw";
+import farSrc from "./shaders/far.frag?raw";
 import { MAX_OPS as OPS_PER_CHAIN, FLOATS_PER_OP, packOps, OP } from "./ops";
-import { LayerBank, MAX_LAYERS } from "./layers";
+import { LayerBank, MAX_LAYERS, type LayerSpec } from "./layers";
 import { RECIPES, PALETTES, Builder, type Params, type Scene, type Palette } from "./recipes";
 import { makeGui, DEBUG_MODES, palettesFor, bestRecipeFor, type Settings } from "./gui";
 
@@ -62,11 +63,11 @@ const settings: Settings = {
   stretchLimit: 60.0,
   paperAge: 0.35,
   bleed: 0.12,
-  edgeWobble: 0.6,
+  edgeWobble: 0.3,
   edgeDark: 0.12,
   tooth: 0.6,
   granulation: 0.6,
-  wear: 0.15,
+  wear: 0.06,
   colourMatch: 1,
   hairMix: 1,
   hairWidth: 0.25,
@@ -120,12 +121,13 @@ function buildProgram() {
   program = pr;
   gl.useProgram(pr);
   uni = {};
-  for (const n of ["uResolution", "uPxPerMm", "uTime", "uOpCount", "uOpCount2", "uUnderMode", "uDebug", "uCells", "uNoise", "uRowShift", "uPaper", "uTransfer", "uTransfer2", "uDry", "uSamples", "uBleed", "uPaperTex", "uSurface", "uProbe", "uGroundUnder", "uLayerStyle", "uLayerStyle2", "uInterleave", "uSheetMean", "uSheetMul", "uCoated"]) uni[n] = gl.getUniformLocation(pr, n);
+  for (const n of ["uResolution", "uPxPerMm", "uTime", "uOpCount", "uOpCount2", "uUnderMode", "uDebug", "uCells", "uNoise", "uRowShift", "uPaper", "uTransfer", "uTransfer2", "uDry", "uSamples", "uBleed", "uPaperTex", "uSurface", "uProbe", "uGroundUnder", "uLayerStyle", "uLayerStyle2", "uInterleave", "uSheetMean", "uSheetMul", "uCoated", "uFarField", "uFar"]) uni[n] = gl.getUniformLocation(pr, n);
   gl.uniformBlockBinding(pr, gl.getUniformBlockIndex(pr, "Ops"), 0);
   gl.uniformBlockBinding(pr, gl.getUniformBlockIndex(pr, "Palette"), 1);
   gl.uniform1i(uni.uCells, 0);
   gl.uniform1i(uni.uNoise, 1);
   gl.uniform1i(uni.uRowShift, 2);
+  gl.uniform1i(uni.uFarField, 4);
   errBox.style.display = "none";
 }
 
@@ -272,6 +274,102 @@ gl.bindVertexArray(vao);
 
 const layers = new LayerBank(gl);
 
+// ------------------------------------------------ the far field of a drop layer
+// A drop pushes the film out of the disc it covers and goes on pushing, as r²/2d, for ever. The
+// per-pixel trace can only find a drop in the handful of cells it looks at, so that push was cut
+// off at a cell and a half: four or five radii for a fine shower, but under two for the large
+// drops of a dominant colour, which do most of the pushing. Everything beyond the trace's own
+// window is summed once a frame into a coarse grid per layer (src/shaders/far.frag) and sampled,
+// with its Jacobian, where the layer acts; the trace keeps the exact map inside the window.
+const FAR_N = 128;         // texels per side of one layer's field
+const FAR_MIN_MM = 0.12;   // a layer whose push at the edge of the window is smaller than this is left alone
+const FAR_MAX_STEP = 1.2;  // and one whose cell the grid cannot resolve at all (a very wide view)
+const FAR_MARGIN_MM = 40;  // how far outside the sheet the trace may wander and still find its field
+const FAR_R = 4.0;         // the sum is cut off here, in cells (FN = 5 in the shader guarantees 4.5)
+const farFloat = !!(gl.getExtension("EXT_color_buffer_float") || gl.getExtension("EXT_color_buffer_half_float"));
+const farParams = new Float32Array(MAX_LAYERS * 4);   // per layer: grid coords of the field's corner, 1/extent, on
+let farTex: WebGLTexture | null = null;
+let farFb: WebGLFramebuffer | null = null;
+let farProgram: WebGLProgram | null = null;
+const farUni: Record<string, WebGLUniformLocation | null> = {};
+if (farFloat) {
+  farTex = gl.createTexture()!;
+  gl.activeTexture(gl.TEXTURE4);
+  gl.bindTexture(gl.TEXTURE_2D_ARRAY, farTex);
+  gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.RGBA16F, FAR_N, FAR_N, MAX_LAYERS);
+  gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  farFb = gl.createFramebuffer()!;
+  const vs = compile(gl.VERTEX_SHADER, vertSrc);
+  const fs = compile(gl.FRAGMENT_SHADER, farSrc);
+  const pr = gl.createProgram()!;
+  gl.attachShader(pr, vs); gl.attachShader(pr, fs); gl.linkProgram(pr);
+  if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) fail("Link error: " + gl.getProgramInfoLog(pr));
+  farProgram = pr;
+  gl.useProgram(pr);
+  for (const n of ["uCells", "uRowShift", "uSlot", "uOrigin", "uStep", "uParam", "uEcc"]) farUni[n] = gl.getUniformLocation(pr, n);
+  gl.uniform1i(farUni.uCells, 0);
+  gl.uniform1i(farUni.uRowShift, 2);
+}
+let farLast: number[] = [];
+let farHalf = 0;   // the extent the fields were last baked over
+let farTurn = 0;   // which layer's field is re-baked this frame (they are spread over the frames)
+/** Bake the far field of every layer whose drops are large enough for the trace's window to cut it off.
+ *  While the sheet moves only one layer is re-baked per frame: a drop travels 0.12 cells a second, so a
+ *  field a few frames old is off by a thousandth of a cell, and the cost is one layer's worth a frame. */
+function buildFarFields(specs: (LayerSpec | undefined)[], small: Uint8Array, ecc: Float32Array) {
+  farParams.fill(0);
+  if (farProgram && farTex) {
+    const w0n = settings.neighbourhood >= 3 ? 1.5 : 0.9, w1n = settings.neighbourhood >= 3 ? 2.4 : 1.5;
+    const halfDiag = 0.5 * Math.hypot(sheetWidthMm(), (sheetWidthMm() * canvas.height) / Math.max(1, canvas.width)) + FAR_MARGIN_MM;
+    // a resize or a zoom moves every field, and the canvas alone does not force a full frame
+    const fresh = Math.abs(halfDiag - farHalf) > 1e-3 * farHalf;
+    farHalf = halfDiag;
+    const skip = settings.animate && !needFull && !fresh;
+    const turnOf = farLast[farTurn % Math.max(1, farLast.length)] ?? -1;
+    const turn: number[] = [];
+    let drawn = false;
+    for (let i = 0; i < MAX_LAYERS; i++) {
+      const sp = specs[i];
+      if (!sp || !sp.origin) continue;
+      const E = halfDiag / sp.cellMm;   // half-extent of the field, in cells
+      // the push this layer loses at the edge of the trace's window, in mm, and how well the grid resolves its cell
+      if ((sp.radius * sp.radius * sp.cellMm) / (2 * w1n) < FAR_MIN_MM || (2 * E) / FAR_N > FAR_MAX_STEP) continue;
+      const c = Math.cos(sp.rot ?? 0), sn = Math.sin(sp.rot ?? 0);
+      const gx = (-c * sp.origin[0] - sn * sp.origin[1]) / sp.cellMm;   // the centre of the sheet in this layer's grid
+      const gy = (sn * sp.origin[0] - c * sp.origin[1]) / sp.cellMm;
+      const step = (2 * E) / FAR_N;
+      farParams.set([gx - E, gy - E, 0.5 / E, 1], i * 4);
+      turn.push(i);
+      if (skip && i !== turnOf) continue;   // its field is at most a frame or two old
+      if (!drawn) {
+        gl.useProgram(farProgram);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, farFb);
+        gl.viewport(0, 0, FAR_N, FAR_N);
+        gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D_ARRAY, layers.tex);
+        gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, layers.shiftTex);
+        gl.bindVertexArray(vao);
+        drawn = true;
+      }
+      gl.framebufferTextureLayer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, farTex, 0, i);
+      gl.uniform1i(farUni.uSlot, i);
+      gl.uniform2f(farUni.uOrigin, gx - E, gy - E);
+      gl.uniform1f(farUni.uStep, step);
+      // the regularisation follows the grid: a kernel narrower than a texel would be lost to the interpolation
+      gl.uniform4f(farUni.uParam, Math.max(0.8, 1.7 * step), small[i] ? 1.0 : w0n, small[i] ? 1.5 : w1n, FAR_R);
+      gl.uniform1f(farUni.uEcc, ecc[i]);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+    }
+    if (drawn) gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    farLast = turn;
+    farTurn = (farTurn + 1) % Math.max(1, turn.length);
+  }
+  gl.useProgram(program);
+  gl.uniform4fv(uni.uFar, farParams);
+}
+
 // Noise texture: r white, g smooth 8-cell, b smooth 32-cell, a smooth 64-cell (all tileable)
 function makeNoiseTexture() {
   const N = 256;
@@ -360,13 +458,18 @@ function uploadScene(scene: Scene, palette: Palette) {
   // per-layer shading constants (style bits, style parameter, ring amplitude), read by the shader per slot
   const layerStyle = new Float32Array(MAX_LAYERS * 4);
   const layerStyle2 = new Float32Array(MAX_LAYERS * 4).fill(1);
+  const layerSmall = new Uint8Array(MAX_LAYERS);
+  const layerEcc = new Float32Array(MAX_LAYERS);
   for (const o of [...scene.ops, ...underOps]) {
     if (o.type !== 1 || o.p[0] >= MAX_LAYERS) continue;
     layerStyle.set([o.p[2], o.p[9] ?? 1, o.p[10] ?? 0, o.p[12] ?? 1], o.p[0] * 4);   // .w: how ragged this colour's edge is, 1 = a typical one (FEATHER, measured on the scans)
     layerStyle2.set([o.p[13] ?? 1, 0, 0, 0], o.p[0] * 4);   // .x: how diffuse its edge is, 1 = a typical one (SOFTNESS)
+    layerSmall[o.p[0]] = o.p[11] > 0.5 ? 1 : 0;             // the cheap 3×3 lookup, whose window differs
+    layerEcc[o.p[0]] = o.p[14] ?? 0;
   }
   gl.uniform4fv(uni.uLayerStyle, layerStyle);
   gl.uniform4fv(uni.uLayerStyle2, layerStyle2);
+  buildFarFields(allLayers, layerSmall, layerEcc);
 
   const top = packOps(scene.ops);
   const und = packOps(underOps);
@@ -516,6 +619,7 @@ function bindTextures() {
   gl.bindTexture(gl.TEXTURE_2D, noiseTex);
   gl.activeTexture(gl.TEXTURE2);
   gl.bindTexture(gl.TEXTURE_2D, layers.shiftTex);
+  if (farTex) { gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_2D_ARRAY, farTex); }
 }
 function uploadFrame() {
   rebuildScene();
@@ -564,7 +668,7 @@ function savePng() {
 }
 
 // ----------------------------------------------------------------- init
-const BASE_DEFAULTS = { viscosity: 0.35, gall: 1, density: 1, combScale: 1, combStrength: 1, curlStrength: 1, transferAmp: 1, paperAge: 0.35, bleed: 0.12, edgeDark: 0.12, grain: 0.7, tooth: 0.6, granulation: 0.6, wear: 0.15, colourMatch: 1, hairMix: 1, hairWidth: 0.25, drift: 1.2, breath: 0.12, stretchLimit: 60, gapFill: 0.7 };
+const BASE_DEFAULTS = { viscosity: 0.35, gall: 1, density: 1, combScale: 1, combStrength: 1, curlStrength: 1, transferAmp: 1, paperAge: 0.35, bleed: 0.12, edgeDark: 0.12, grain: 0.7, tooth: 0.6, granulation: 0.6, wear: 0.06, colourMatch: 1, hairMix: 1, hairWidth: 0.25, drift: 1.2, breath: 0.12, stretchLimit: 60, gapFill: 0.7 };
 function applyDefaults(name: string) {
   const r = RECIPES.find((x) => x.name === name);
   if (!r) return;
@@ -627,6 +731,7 @@ canvas.addEventListener("pointerup", (e) => {
 canvas.addEventListener("touchstart", (e) => { if (e.touches.length === 2) { settings.animate = !settings.animate; gui.controllersRecursive().forEach((c) => c.updateDisplay()); markDirty(); } }, { passive: true });
 requestAnimationFrame(frame);
 
+interface FragStats { n: number; perCm2: number; d50: number; p90: number; giant: number; dA50: number; el: number }
 /** Render the flat-id view once and count pixels per palette colour (paper = index -1). */
 function measureCoverage(noRebuild = false): Record<string, number> {
   const prev = settings.debug;
@@ -669,6 +774,300 @@ function measureExact(pal: Palette): Record<string, number> {
   settings.debug = prev;
   gl.uniform1i(uni.uDebug, DEBUG_MODES.indexOf(settings.debug));
   return out;
+}
+
+/** The visible fragments of the currently uploaded scene, counted exactly as the scans' were: connected
+ *  components of one colour in the flat-id view whose equivalent-circle diameter reaches `minMm`. Per colour the
+ *  count per cm², the median, the 90th percentile and the area-weighted median of that diameter, in mm (half the
+ *  colour's area lies in pieces smaller than the last, which is the size the eye reads), and `giant`, the largest
+ *  single component's share of the colour's area, as the scans' analysis records it. `cov` is each colour's share
+ *  of the pixels (the topmost colour per pixel, no anti-aliasing weight), paper included. */
+function measureFragments(minMm = 1.2): { stats: Record<string, FragStats>; cov: Record<string, number> } {
+  const prev = settings.debug;
+  settings.debug = "flat ids";
+  gl.uniform1i(uni.uDebug, DEBUG_MODES.indexOf(settings.debug));
+  drawWhole();
+  const w = canvas.width, h = canvas.height;          // the whole canvas: at the scans' own resolution a sheet is a
+  const px = new Uint8Array(w * h * 4);               // small patch already, and every cm² of it counts
+  gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
+  settings.debug = prev;
+  gl.uniform1i(uni.uDebug, DEBUG_MODES.indexOf(settings.debug));
+  markDirty();
+  const n = w * h;
+  const ids = new Int16Array(n);
+  const pixels = new Map<number, number>();
+  for (let i = 0; i < n; i++) { const id = Math.round((px[i * 4] / 255) * 32) - 1; ids[i] = id; pixels.set(id, (pixels.get(id) ?? 0) + 1); }
+  const mm = sheetWidthMm() / canvas.width;
+  const seen = new Uint8Array(n), stack = new Int32Array(n);
+  const byCol = new Map<number, number[]>(), allCol = new Map<number, [number, number]>(), elCol = new Map<number, number[]>();
+  const floorPx = (Math.PI / 4) * (minMm / mm) * (minMm / mm);
+  for (let i = 0; i < n; i++) {
+    if (ids[i] < 0 || seen[i]) continue;
+    const c = ids[i];
+    let area = 0, sp = 0, sx = 0, sy = 0, sxx = 0, syy = 0, sxy = 0;
+    stack[sp++] = i; seen[i] = 1;
+    while (sp) {
+      const j = stack[--sp]; area++;
+      const x = j % w, y = (j - x) / w;
+      sx += x; sy += y; sxx += x * x; syy += y * y; sxy += x * y;
+      if (x > 0 && ids[j - 1] === c && !seen[j - 1]) { seen[j - 1] = 1; stack[sp++] = j - 1; }
+      if (x < w - 1 && ids[j + 1] === c && !seen[j + 1]) { seen[j + 1] = 1; stack[sp++] = j + 1; }
+      if (j >= w && ids[j - w] === c && !seen[j - w]) { seen[j - w] = 1; stack[sp++] = j - w; }
+      if (j + w < n && ids[j + w] === c && !seen[j + w]) { seen[j + w] = 1; stack[sp++] = j + w; }
+    }
+    let all = allCol.get(c); if (!all) { all = [0, 0]; allCol.set(c, all); }      // the scan's `giant`: every component counts
+    all[0] += area; all[1] = Math.max(all[1], area);
+    if (area < floorPx) continue;
+    let a = byCol.get(c); if (!a) { a = []; byCol.set(c, a); }
+    a.push(2 * Math.sqrt((area * mm * mm) / Math.PI));
+    // how far the piece is drawn out (major/minor axis of its second moments), as the scan analysis measures `el`:
+    // on a combed sheet the fragments are streaks, and this says whether they are the scan's streaks
+    const vx = sxx / area - (sx / area) * (sx / area), vy = syy / area - (sy / area) * (sy / area);
+    const vc = sxy / area - (sx / area) * (sy / area), tr = vx + vy, dt = Math.sqrt(Math.max(0, (vx - vy) * (vx - vy) / 4 + vc * vc));
+    const l1 = tr / 2 + dt, l2 = Math.max(1e-6, tr / 2 - dt);
+    let e = elCol.get(c); if (!e) { e = []; elCol.set(c, e); }
+    e.push(Math.sqrt(l1 / l2));
+  }
+  const areaCm2 = (n * mm * mm) / 100;
+  const stats: Record<string, FragStats> = {}, cov: Record<string, number> = {};
+  const nameOf = (id: number) => (id < 0 ? "paper" : paletteObj.pigments[id]?.name ?? String(id));
+  for (const [id, k] of pixels) cov[nameOf(id)] = Math.round((1000 * k) / n) / 10;
+  for (const [c, a] of byCol) {
+    a.sort((x, y) => x - y);
+    const q = (f: number) => a[Math.min(a.length - 1, Math.floor(f * a.length))];
+    // the area-weighted median (half the colour's area lies in pieces smaller than this) is what the eye reads as
+    // the size of the blobs, where the plain median counts every speck equally
+    let tot = 0; for (const d of a) tot += d * d;
+    let acc = 0, dA50 = a[a.length - 1];
+    for (const d of a) { acc += d * d; if (acc >= tot / 2) { dA50 = d; break; } }
+    const all = allCol.get(c) ?? [1, 0];
+    const e = (elCol.get(c) ?? [1]).slice().sort((x, y) => x - y);
+    stats[nameOf(c)] = { n: a.length, perCm2: a.length / areaCm2, d50: q(0.5), p90: q(0.9), giant: all[1] / Math.max(1, all[0]), dA50, el: e[e.length >> 1] };
+  }
+  return { stats, cov };
+}
+
+/** Fit a sheet to the scan's own drop statistics, not to its coverage alone. Each pigment carries three knobs —
+ *  the spots per cm², the median spot diameter and the Weibull shape of the size distribution — and the scan gives
+ *  the matching numbers, measured on it exactly as they are measured on the render here: the count per cm², the
+ *  median and the 90th percentile of the visible fragments' diameter. Both sides therefore count fragments, which
+ *  is what the eye counts too: the part of a drop a later colour covers belongs to neither. They are counted at the
+ *  resolution the scan was measured at (`fragPpi`), because how many components a shower falls into depends on it:
+ *  at 100 ppi this render of dp 80 shows 0.31 black fragments per cm², at the scan's own 7.4 px/mm 0.62.
+ *
+ *  The targets cannot all be met, and the fit says so rather than trading one away silently. A colour's measured
+ *  area and its measured fragments are inconsistent on the scans themselves: over the collection the fragments
+ *  account for a median 52 % of the area the mixture model gives the colour, because the mixture files the thin
+ *  fringe between two colours, and the speckle inside a neighbour's mottle, as a third colour. So per colour, with
+ *  ln n ≈ lnN, ln d ≈ lnD and ln C ≈ lnN + 2·lnD, one damped weighted-least-squares step is taken in (lnN, lnD)
+ *  against three residuals:
+ *    - coverage (`wCov`) is held, because it sets the sheet's colour balance: dropped, the ground film swallows the
+ *      difference (dp 80's black would go from 11 % of the sheet to 39 %). A trust region keeps a step from ever
+ *      pushing a colour's coverage further from the sheet's than it is, or than `covBand`, whichever is wider;
+ *    - size (`wSize`) is the mean in log of two residuals, the median the scan measured and the area-weighted
+ *      median its own fitted Weibull implies (half the colour's area in pieces smaller than it). The median alone
+ *      leaves what reads as blotchy free: a render can carry the right median and the right p90 and still put half
+ *      its area in the clusters beyond them;
+ *    - the count is a bound, not an equality, and how hard a bound depends on the scan. Fewer fragments than the
+ *      scan counted is always wrong (`wCount`), since merging and burial can only lose them. More is wrong only
+ *      where the scan's own fragments account for its colour's area: the slack δ = ln(area claimed / area
+ *      accounted for) is measured once per colour at the start, and the penalty for standing above the scan's
+ *      count is `wCountOver`/(1 + δ²) — full where the colour IS its drops, nil where the mixture gave it an area
+ *      its component analysis never resolved (dp 80's olive covers 4.9 % of the sheet in components totalling
+ *      0.03 %), and no count can be read from that.
+ *  The Weibull shape follows the p90/median ratio, as before. The ground fill is fitted to the sheet's bare-paper
+ *  fraction throughout: no drop statistic constrains a film. A knob the render ignores (a recipe that lays a
+ *  colour at a density of its own) is detected and frozen. The colours of a sheet share it — every drop covers the
+ *  colours under it — so a step taken for one moves the others and a chase can overshoot: the run keeps the iterate
+ *  that scored best on the objective above, not the last, and reports both scores, so a sheet that never improved
+ *  on where it started keeps the values it came with. */
+function fitRecipeSizes(name: string, targets: Record<string, { perCm2?: number; d50?: number; p90?: number }>, iters = 8, paletteKey?: string, o: { wCov?: number; wSize?: number; wCount?: number; wCountOver?: number; covBand?: number; ppi?: number; fragPpi?: number; damp?: number; minN?: number; sizeStat?: string } = {}) {
+  const recipe = RECIPES.find((r) => r.name === name);
+  if (!recipe) return null;
+  const pal = PALETTES.find((p) => p.key === (paletteKey ?? recipe.palette));
+  if (!pal || !targets) return null;
+  paletteObj = pal;
+  const wc0 = o.wCov ?? 1.5, wd = o.wSize ?? 1, wUnder = o.wCount ?? 1, wOver = o.wCountOver ?? 0.15;
+  const band = Math.log(o.covBand ?? 1.25);            // the coverage may drift this far before it takes the fit over
+  const damp = o.damp ?? 0.5, minN = o.minN ?? 8, maxStep = 0.35;
+  const fracT: Record<string, number> = {};
+  for (const pg of pal.pigments) if (pg.frac !== undefined) fracT[pg.name] = pg.frac;
+  const savedPpi = settings.ppi, savedZoom = settings.zoom;
+  settings.zoom = 1;
+  // Fragments are counted at the resolution the scan was measured at (`fragPpi` = the scan's px/mm × 25.4, which
+  // runs 58–391 ppi over the collection), because how many components a shower of drops falls into depends on it:
+  // at 100 ppi this render of dp 80 counts 0.31 black fragments per cm², at the scan's own 7.4 px/mm 0.62 and at
+  // 11 px/mm 0.95. Measured coarser than the scan, a render looks short of drops and the fit doubles its density.
+  // The coverage is measured where it always was, over a wide sheet (heavy tails make a narrow view noisy).
+  const fragPpi = o.fragPpi ?? 100;
+  const covPpi = o.ppi ?? (["Combed", "Sprinkled", "Curled"].includes(recipe.group) ? 120 : 60);
+  const build = (ppi: number) => { settings.ppi = ppi; uploadScene(recipe.build({ ...currentParams(), animate: false }, pal), pal); };
+  const unlaid = new Set<string>();
+  const log: unknown[] = [];
+  let frags: Record<string, FragStats> = {}, exact: Record<string, number> = {}, cov: Record<string, number> = {};
+  const step = (x: number) => Math.exp(Math.max(-maxStep, Math.min(maxStep, x)));
+  // The size the eye reads is the area-weighted median — half the colour's area lies in pieces smaller than it —
+  // not the plain median, which counts every speck equally: on dp 424 the render's yellow has a median fragment of
+  // 2.7 mm and an area-weighted median of 5.4 mm. The scan's is not measured directly, but its shifted Weibull is
+  // (median, p90 and the shape fitted on the scan), so it follows from the same distribution.
+  const areaMedian = (d50: number, p90: number) => {
+    const fl = 1.2, r = (p90 - fl) / Math.max(0.01, d50 - fl);
+    if (!(r > 1.02) || d50 <= fl) return d50;
+    const k = Math.max(0.3, Math.min(6, Math.log(Math.log(10) / Math.log(2)) / Math.log(r)));
+    const sc = (d50 - fl) / Math.pow(Math.LN2, 1 / k);
+    const M = 512; const ds: number[] = [];
+    let tot = 0;
+    for (let i = 0; i < M; i++) { const d = fl + sc * Math.pow(-Math.log((i + 0.5) / M), 1 / k); ds.push(d); tot += d * d; }
+    ds.sort((x, y) => x - y);
+    let acc = 0;
+    for (const d of ds) { acc += d * d; if (acc >= tot / 2) return d; }
+    return d50;
+  };
+  // The size residual is the mean of the two in log: the median the scan measured directly, and the area-weighted
+  // median its fitted Weibull implies. Pinned at the median alone, a render can carry the right median and the
+  // right p90 and still be blotchy, because its tail beyond the p90 is the drops that merged into clusters.
+  const sizeRes = (t: { d50: number; p90?: number }, s: FragStats) => {
+    const rd = Math.log(t.d50 / Math.max(0.2, s.d50));
+    if (o.sizeStat === "d50" || !t.p90) return rd;
+    const rA = Math.log(areaMedian(t.d50, t.p90) / Math.max(0.2, s.dA50));
+    return o.sizeStat === "dA50" ? rA : 0.5 * (rd + rA);
+  };
+  // Not every knob reaches the sheet: a recipe may lay a colour at a density of its own (Placard's two or three huge
+  // drops per sheet), and driving a knob the render ignores walks the other one off the sheet. A knob that moves by a
+  // sixth without moving its statistic twice running is dead: it goes back to the value it came with and stays there.
+  const init = new Map(pal.pigments.map((pg) => [pg.name, { perCm2: pg.perCm2, d50: pg.d50, wk: pg.wk }]));
+  // How far the scan's own numbers hang together, per colour, measured once against the render's packing:
+  // δ = ln(area the scan's coverage claims / area its own fragments account for). Where δ ≈ 0 the colour IS its
+  // drops and a count above the scan's is a real excess, penalised. Where δ is large the mixture has filed thin
+  // fringe and speckle inside its neighbours as this colour, so the components it counted are a small sample of a
+  // population it never resolved, and its count cannot bound the render's from above.
+  const slack: Record<string, number> = {};
+  const overW = (n: string) => wOver / (1 + (slack[n] ?? 0) * (slack[n] ?? 0));
+  const prev = new Map<string, { kn: number; kd: number; n: number; d: number }>();
+  const dead: Record<string, string[]> = {};
+  const strikes: Record<string, number> = {};
+  const isDead = (n: string, k: string) => (dead[n] ?? []).includes(k);
+  // The exact per-colour coverage costs one probe render per colour; the flat-id view costs one for the whole sheet
+  // and comes with the fragments. So the exact coverage is measured once at the start and once at the end, and the
+  // loop tracks it as the flat-id share times the ratio the two stood in at the start.
+  const ratio: Record<string, number> = {};
+  const covOf = (n: string) => Math.max(0.05, (cov[n] ?? 0) * (ratio[n] ?? 1));
+  const snap = () => ({ pg: pal.pigments.map((p) => ({ perCm2: p.perCm2, d50: p.d50, wk: p.wk })), fill: pal.bg?.fill });
+  const restore = (sn: ReturnType<typeof snap>) => { pal.pigments.forEach((p, i) => { p.perCm2 = sn.pg[i].perCm2; p.d50 = sn.pg[i].d50; p.wk = sn.pg[i].wk; }); if (pal.bg && sn.fill !== undefined) pal.bg.fill = sn.fill; };
+  let best = { score: Infinity, it: -1, sn: snap() };
+  const scores: number[] = [];
+  for (let it = 0; it <= iters; it++) {
+    build(fragPpi);
+    frags = measureFragments().stats;
+    build(covPpi);
+    cov = measureCoverage(true);
+    if (it === 0) {
+      exact = measureExact(pal);
+      for (const pg of pal.pigments) if ((exact[pg.name] ?? 0) < 0.05 && fracT[pg.name] !== undefined) unlaid.add(pg.name);
+      for (const n of Object.keys(exact)) ratio[n] = (exact[n] ?? 0) / Math.max(0.05, cov[n] ?? 0);
+    }
+    // how far the sheet stands from the scan, in the fit's own terms: the argmin over the run is what is kept, since
+    // the colours of a sheet share it (every drop covers the colours under it) and a chase can overshoot
+    let score = 0;
+    for (const pg of pal.pigments) {
+      if (unlaid.has(pg.name)) continue;
+      const t = targets[pg.name], s = frags[pg.name], target = fracT[pg.name];
+      const rc = target === undefined ? 0 : Math.log(Math.max(0.2, target) / Math.max(0.2, covOf(pg.name)));
+      score += wc0 * rc * rc;
+      if (!pg.d50 || !t || !t.perCm2 || !t.d50 || !s || s.n < minN) continue;
+      const rn = Math.log(t.perCm2 / Math.max(1e-3, s.perCm2)), rd = sizeRes(t as { d50: number; p90?: number }, s);
+      if (it === 0) slack[pg.name] = Math.max(0, rc - rn - 2 * rd);
+      score += wd * rd * rd + (rn > 0 ? wUnder : overW(pg.name)) * rn * rn;
+    }
+    if (pal.paperPct !== undefined) { const rp = Math.log(Math.max(0.5, pal.paperPct) / Math.max(0.5, covOf("paper"))); score += wc0 * rp * rp; }
+    scores.push(Math.round(1000 * score) / 1000);
+    if (score < best.score) best = { score, it, sn: snap() };
+    log.push({ it, score: Math.round(1000 * score) / 1000, frags: Object.fromEntries(Object.entries(frags).map(([k, v]) => [k, [+v.perCm2.toFixed(2), +v.d50.toFixed(2), +v.p90.toFixed(2)]])), cov: Object.fromEntries(pal.pigments.map((p) => [p.name, +covOf(p.name).toFixed(1)])) });
+    if (it === iters) break;
+    for (const pg of pal.pigments) {                        // knobs that no longer reach the render
+      const s = frags[pg.name], pv = prev.get(pg.name), b0 = init.get(pg.name);
+      if (s) prev.set(pg.name, { kn: pg.perCm2 ?? 1, kd: pg.d50 ?? 1, n: s.perCm2, d: s.d50 });
+      if (!s || !pv || !b0) continue;
+      const chk = (knob: number, was: number, got: number, had: number, key: "perCm2" | "d50") => {
+        const dk = Math.log(Math.max(1e-4, knob) / Math.max(1e-4, was));
+        if (Math.abs(dk) < 0.16 || isDead(pg.name, key)) return;
+        if (Math.abs(Math.log(Math.max(1e-4, got) / Math.max(1e-4, had))) > 0.1 * Math.abs(dk)) { strikes[pg.name + key] = 0; return; }
+        if ((strikes[pg.name + key] = (strikes[pg.name + key] ?? 0) + 1) >= 2) { (dead[pg.name] ??= []).push(key); pg[key] = b0[key]; }
+      };
+      chk(pg.perCm2 ?? 1, pv.kn, s.perCm2, pv.n, "perCm2");
+      chk(pg.d50 ?? 1, pv.kd, s.d50, pv.d, "d50");
+    }
+    for (const pg of pal.pigments) {
+      if (unlaid.has(pg.name) || !pg.d50) continue;
+      const t = targets[pg.name], s = frags[pg.name];
+      const target = fracT[pg.name];
+      const rc = target === undefined ? 0 : Math.log(Math.max(0.2, target) / Math.max(0.2, covOf(pg.name)));
+      if (t && t.perCm2 && t.d50 && s && s.n >= minN) {
+        const rn = Math.log(t.perCm2 / Math.max(1e-3, s.perCm2));       // > 0: fewer drops than the scan counted
+        const rd = sizeRes(t as { d50: number; p90?: number }, s);
+        const liveN = !isDead(pg.name, "perCm2"), liveD = !isDead(pg.name, "d50");
+        const wn = rn > 0 ? wUnder : overW(pg.name);
+        // Outside the band the coverage weight grows quadratically, so a knob the recipe overrides (Placard's few
+        // huge drops carry their own density) cannot walk a colour off the sheet: the step becomes the old
+        // coverage fit instead. Inside it, the statistics drive.
+        const wc = wc0 * Math.max(1, (rc / band) * (rc / band));
+        const a11 = wn + wc, a12 = 2 * wc, a22 = wd + 4 * wc;           // normal equations of the weighted step
+        const b1 = wn * rn + wc * rc, b2 = wd * rd + 2 * wc * rc;
+        const det = Math.max(1e-6, a11 * a22 - a12 * a12);
+        // a dead knob is held at 0 rather than merely unweighted: left in the solve it would take the whole coverage
+        // correction (and reach nothing), and the step in the live knob would chase the statistics alone
+        let dN = liveN && liveD ? (b1 * a22 - a12 * b2) / det : liveN ? b1 / a11 : 0;
+        let dD = liveN && liveD ? (a11 * b2 - a12 * b1) / det : liveD ? b2 / a22 : 0;
+        // Trust region on the coverage: a step may never push a colour's coverage further from the sheet's than it
+        // already is, or than the band, whichever is wider. It is the coverage that carries the sheet's colour
+        // balance, and a target the recipe cannot express would otherwise walk the colour off the sheet.
+        const pred = damp * (dN + 2 * dD), lim = Math.max(Math.abs(rc), band);
+        if (Math.abs(rc - pred) > lim && Math.abs(pred) > 1e-6) {
+          const sc = Math.max(0, Math.min(1, (rc - Math.sign(rc - pred) * lim) / pred));
+          dN *= sc; dD *= sc;
+        }
+        const nMin = 0.25 * t.perCm2, nMax = 25 * t.perCm2;             // never a fog of drops for a colour the scan shows as a haze
+        if (liveN) pg.perCm2 = Math.min(40, nMax, Math.max(0.01, nMin, Math.round(1000 * (pg.perCm2 ?? t.perCm2) * step(damp * dN)) / 1000));
+        if (liveD) pg.d50 = Math.min(60, Math.max(0.3, Math.round(100 * pg.d50 * step(damp * dD)) / 100));
+        const rT = t.p90 && t.d50 ? t.p90 / t.d50 : 0, rR = s.p90 / s.d50;    // Weibull: p90/p50 = 3.32^(1/k)
+        if (rT > 1.02 && rR > 1.02 && liveD) pg.wk = Math.round(100 * Math.min(3, Math.max(0.45, (pg.wk ?? 1) * Math.pow(Math.log(rR) / Math.log(rT), 0.7)))) / 100;
+      } else if (target !== undefined && !isDead(pg.name, "d50")) {
+        // no fragment measurement to fit: a colour laid as a film, or one the later throws have all but buried.
+        // Its median size still answers to the coverage, as it did before the statistics were fitted.
+        pg.d50 = Math.min(60, Math.max(0.3, Math.round(100 * pg.d50 * Math.pow(Math.min(1.5, Math.max(0.67, Math.exp(0.5 * rc))), damp)) / 100));
+      }
+    }
+    if (pal.bg && pal.paperPct !== undefined) {
+      const ratioP = Math.pow(Math.min(1.4, Math.max(0.7, Math.sqrt(covOf("paper") / Math.max(0.5, pal.paperPct)))), damp);   // more paper than the sheet → fuller background
+      pal.bg.fill = Math.round(100 * Math.min(1, (pal.bg.fill ?? 1) * ratioP)) / 100;
+    }
+  }
+  restore(best.sn);                                   // the best iterate, not the last
+  build(fragPpi);
+  frags = measureFragments().stats;
+  build(covPpi);
+  cov = measureCoverage(true);
+  exact = measureExact(pal);
+  settings.ppi = savedPpi; settings.zoom = savedZoom;
+  markDirty();
+  // residuals: how far the render still stands from the scan, in log units (0 = met), and the coverage it cost
+  const resid: Record<string, { n: number; d: number; dA: number; cov: number }> = {};
+  for (const pg of pal.pigments) {
+    const t = targets[pg.name], s = frags[pg.name];
+    if (!pg.d50 || unlaid.has(pg.name) || !t || !t.perCm2 || !t.d50) continue;
+    resid[pg.name] = {
+      n: +Math.log((s?.perCm2 ?? 0.001) / t.perCm2).toFixed(2),
+      d: +Math.log((s?.d50 ?? 0.2) / t.d50).toFixed(2),
+      dA: +Math.log((s?.dA50 ?? 0.2) / areaMedian(t.d50, t.p90 ?? t.d50)).toFixed(2),
+      cov: fracT[pg.name] === undefined ? 0 : +((exact[pg.name] ?? 0) - fracT[pg.name]).toFixed(1),
+    };
+  }
+  return {
+    name, palette: pal.key, unlaid: [...unlaid], bg: pal.bg, last: exact, frags, targets, resid, log, dead, scores, slack, best: { it: best.it, score: Math.round(1000 * best.score) / 1000, start: scores[0] },
+    n: Object.fromEntries(pal.pigments.filter((p) => p.d50 && !unlaid.has(p.name)).map((p) => [p.name, p.perCm2])),
+    d: Object.fromEntries(pal.pigments.filter((p) => p.d50 && !unlaid.has(p.name)).map((p) => [p.name, p.d50])),
+    wk: Object.fromEntries(pal.pigments.filter((p) => p.d50 && !unlaid.has(p.name)).map((p) => [p.name, p.wk])),
+  };
 }
 
 /** Fit a whole recipe (its default sheet) to the sheet's measured fractions by adjusting each
@@ -771,7 +1170,9 @@ function fitRecipe(name: string, iters = 8, paletteKey?: string) {
   rebuildProgram: () => { buildProgram(); markDirty(); },
   measureCoverage: measureCoverage,
   measureExact: () => measureExact(paletteObj),
+  measureFragments,
   fitRecipe,
+  fitRecipeSizes,
   bestRecipeFor,
   Builder,
   PALETTES,

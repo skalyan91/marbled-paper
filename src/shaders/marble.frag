@@ -38,6 +38,9 @@ uniform vec3 uSheetMul;    // the same as a pigment mixture (coverage-weighted g
 uniform ivec4 uInterleave; // (kx, ky, px, py): this pass shades the screen pixels x ≡ px (mod kx), y ≡ py (mod ky), one per texel of a target 1/kx × 1/ky the screen
 uniform vec4 uLayerStyle[8]; // per drop layer: style bits, style param, ring amplitude (constants of the sprinkle op, looked up at shading time)
 uniform vec4 uLayerStyle2[8]; // per drop layer: .x how diffuse this colour's edge is (SOFTNESS, measured on the scans; 1 = a typical edge), -, -, -
+uniform sampler2DArray uFarField; // per drop layer: the push of every drop of the layer from beyond the lookup
+                                  // window (see src/shaders/far.frag), in cells, with the shear of that push
+uniform vec4 uFar[8];             // per drop layer: grid coordinates of the field's corner, 1 / its extent, 1 if it has one
 
 layout(std140) uniform Ops { vec4 op[MAX_OPS * 4]; };
 layout(std140) uniform Palette { vec4 col[16]; vec4 pig[16]; };
@@ -317,6 +320,20 @@ void invSprinkle(inout Trace t, vec4 a, vec4 b, vec4 c, vec4 d4) {
       if ((cy & 1) == 0) continue;
       candidate(t, g, Jg, stop, ivec2(cx, cy), vec2(0.0, sh), slot, cell, a, c, R, bw, w0, w1, ecc);
     }
+  }
+  // The far field of this layer: the push of every one of its drops from beyond the window above, summed once a
+  // frame over a coarse grid, because at that distance the sum over a layer is smooth (far.frag). Without it a
+  // drop stops pushing at a cell and a half — under two radii for the large drops of a dominant colour — and the
+  // films beneath are left uncompressed between neighbouring drops. It is applied where the layer hands the trace
+  // on, after its own drops have been looked up, and not before: the tail of a push is not area-preserving by
+  // itself (the lookup holds the head that balances it), so a hit test made after it would find the film squeezed
+  // towards the drops and read their discs as larger than they are — the dominant colour of dp 80 gained four
+  // points of coverage that way.
+  vec4 fp = uFar[slot];
+  if (!t.done && fp.w > 0.5) {
+    vec4 fa = textureLod(uFarField, vec3((g - fp.xy) * fp.z, float(slot)), 0.0);   // no implicit derivatives: this is inside the op loop
+    g += fa.xy;
+    Jg += mat2(fa.z, fa.w, fa.w, -fa.z) * Jg;
   }
   if (!t.done) { t.S = b.xy + transpose(R) * (g * cell); t.J = transpose(R) * Jg * cell; }
 }
@@ -607,7 +624,15 @@ vec3 paperColor(vec2 P, float soft, float lodScr, out float fibre, out float too
   float g0 = tnoise(pB * 0.0371 + 0.29, lodFor(lodScr, 0.0371)).r - 0.5;     // 0.105 mm fibre fuzz
   float g1 = tnoise(pC * 0.0155 + 0.13, lodFor(lodScr, 0.0155)).r - 0.5;     // 0.25 mm
   float g2 = tnoise(pA * 0.00775 + 0.61, lodFor(lodScr, 0.00775)).r - 0.5;   // 0.5 mm
-  fibre = clamp(g0 * 1.0 + g1 * 1.6 + g2 * 1.2, -1.0, 1.0);   // the edge's displacement: fibre fuzz and streaks together, so the fringe is ragged, not lumpy
+  // The displacement a paint edge takes from the grain. An outline *wanders*; it does not dither. The weight of an
+  // octave must therefore be proportional to its own length, so that every octave tilts the outline by the same
+  // small slope (here about 0.4 mm of displacement per mm along the edge) and none of them can fold it. Weighted
+  // the other way (1.0 / 1.6 / 1.2 over 0.105 / 0.25 / 0.5 mm) the finest octave alone displaced the edge by
+  // ±0.12 mm rms with a fresh value every texel — one screen pixel at life size — so every outline came out as a
+  // millimetre-wide band of dust and a comb-drawn film a third of a millimetre wide dissolved into speckle
+  // (dp 177, dp 25 at true scale). The rms of the whole field is halved by the reweighting, which is the amplitude
+  // the outlines actually carry on the scans.
+  fibre = clamp(g0 * 0.20 + g1 * 0.50 + g2 * 1.00, -1.0, 1.0);
   // The take-up of a film into the fibre mat: the paint is absorbed unevenly, thicker in the hollows and where the
   // fibres are dense, so the reflectance of every colour is speckled at the fibres' own scale. On the 400–600 dpi
   // scans the log-reflectance inside a film has an rms of 0.09–0.10 below 0.2 mm and 0.04–0.07 per octave from 0.2
@@ -756,6 +781,23 @@ float transferShade(vec2 P, float lodScr) {
 
 struct Shaded { vec3 rgb; float cov; float stretch; };
 
+// How strongly the paper's relief shows through a film: the film's own optical density against the paper.
+// The paint is taken up unevenly, so the film is thicker in some places than others, and what a given *relative*
+// variation of thickness does to the reflectance is Beer–Lambert's d(ln R) = od · dd/d — proportional to how much
+// the film darkens the sheet in the first place. A black lies dozens of times darker than the paper and its grain
+// is coarse and obvious; a cream is barely darker than the paper it sits on and shows almost nothing. The render
+// gave every colour the same log-amplitude, which is right for the darks it was calibrated on and two to six times
+// too much for everything paler: measured at 10–11 px/mm, the band rms inside a film runs 0.045–0.054 on the scans
+// for od ≥ 1.4 and 0.007–0.016 for od ≤ 0.8, where the render drew 0.033–0.047 for all of them (dp 25, 177).
+// The divisor and the floor are fitted, not assumed: swept over 21 colours of dp 25, 80, 81, 97, 102, 177 and 455,
+// this pair brings the median render/scan band rms to 0.85 / 1.03 on the darker half of the colours and 1.03 / 1.11
+// on the paler half (0.1 and 0.2 mm), where a flat grain gave the paler half 2.3–6.4. The floor is what the paper's
+// own grain shows through a film too thin to hide it, which never goes to nothing.
+float filmDensity(vec3 c, vec3 pap) {
+  const vec3 W = vec3(0.2126, 0.7152, 0.0722);
+  return clamp(log(max(dot(pap, W), 1e-3) / max(dot(c, W), 1e-3)) / 1.5, 0.25, 1.0);
+}
+
 Shaded shadePattern(Hit h, vec2 P, vec3 paper, float lodScr, float tooth, float grain, int gf) {
   Shaded s;
   s.stretch = 1.0;
@@ -774,8 +816,9 @@ Shaded shadePattern(Hit h, vec2 P, vec3 paper, float lodScr, float tooth, float 
       // modulates the film's density (darker where it pools), and only the wear rubs it bare.
       s.cov = pig[gf].x * mix(0.96 + 0.04 * tooth, 1.0, gfilm * 0.6) * transferShade(P, lodScr);
       s.cov *= (1.0 - uPaperTex.z * 0.08 * (0.5 - tooth)) * (1.0 - uSurface.x * smoothstep(0.78, 0.92, tooth));
-      s.rgb *= 1.0 - uPaperTex.z * 0.18 * (tooth - 0.5);
-      s.rgb *= exp(uPaperTex.z * 1.6 * grain);   // absorbed unevenly into the fibres: film thickness varies at the fibres' scale (Beer–Lambert)
+      float god = filmDensity(col[gf].rgb, paper);
+      s.rgb *= 1.0 - uPaperTex.z * 0.18 * god * (tooth - 0.5);
+      s.rgb *= exp(uPaperTex.z * 1.6 * god * grain);   // absorbed unevenly into the fibres: film thickness varies at the fibres' scale (Beer–Lambert)
       s.stretch = gsig;
     }
     return s;
@@ -794,13 +837,14 @@ Shaded shadePattern(Hit h, vec2 P, vec3 paper, float lodScr, float tooth, float 
   float cov = pg.x * clamp(0.95 + 0.05 * film + (g - 0.5) * pgrain * (1.0 - film) * 0.3, 0.0, 1.0);
   // absorption into the sheet: the film takes unevenly on the fibre relief (stretch-independent). Mostly a density
   // modulation (darker where it pools), only a little bare paper: see the ground film above.
+  float od = filmDensity(col[h.color].rgb, paper);   // how much of the relief this film's own density lets show
   cov *= 1.0 - uPaperTex.z * 0.08 * (0.5 - tooth);
-  base *= 1.0 - uPaperTex.z * 0.18 * (tooth - 0.5);
+  base *= 1.0 - uPaperTex.z * 0.18 * od * (tooth - 0.5);
   // wear: on a handled cover the raised fibres rub bare, pale specks on every colour
   cov *= 1.0 - uSurface.x * smoothstep(0.78, 0.92, tooth);
   // granulation: heavy pigments settle in the hollows (darker), pale ones stay even
-  base *= 1.0 - uPaperTex.w * pg.y * 0.25 * (tooth - 0.5);
-  base *= exp(uPaperTex.z * 1.6 * grain);   // absorbed unevenly into the fibres (see paperColor): every colour speckled at 0.1–1 mm
+  base *= 1.0 - uPaperTex.w * pg.y * 0.25 * od * (tooth - 0.5);
+  base *= exp(uPaperTex.z * 1.6 * od * grain);   // absorbed unevenly into the fibres (see paperColor): every colour speckled at 0.1–1 mm
   // pigment texture (slight value variation, stronger for earths)
   base *= 1.0 + (0.10 + 0.12 * pg.y) * (gB - 0.5);
   cov *= styleCoverage(h, base, lodMat, sig);

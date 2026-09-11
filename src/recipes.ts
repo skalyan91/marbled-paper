@@ -318,6 +318,13 @@ export interface CombOpts { offset?: number; ripple?: number; L?: number; streng
  *  cut a V "at least twice as deep"). Sheets whose own tongue length was measured pass their own `ripple` and keep it. */
 const DEEP_TONGUE = 4.4;
 
+/** How far one drag of the rake pulls the drops out before any comb touches them (nonpareilBase). */
+const DRAG = 3.0;
+
+/** How many passes a colour is thrown in (see Builder.sprinkle): the marbler covers the bath, sees the gaps and
+ *  throws again, so the paint that shows is the last of several passes and every pass has pushed the films beneath. */
+const THROWS = 4;
+
 /** Screening length of a comb's wake as a fraction of the distance to the neighbouring tine path (see CombOpts.damp).
  *  A third: the paint within a third of the way to the next path follows the tine, the rest of the gap stays where it
  *  was (user: the drag should be "limited to just around the comb"). A two-row comb's rows interleave, so its
@@ -364,39 +371,35 @@ export class Builder {
     const slot = this.layers.length;
     if (slot >= 8) return this;
     const p = this.p;
-    // A throw is a Poisson process, not one drop per cell: a lattice with one drop per cell is far too regular (the
-    // scans measure a Clark–Evans ratio of 0.90–0.99, the lattice render 1.11–1.21, and its drops of one colour never
-    // fall close together). The cells are subdivided by `sub` and only one in sub² of them holds a drop, so the count
-    // in a patch is binomial rather than fixed and neighbours may land side by side; `sub` is the largest subdivision
-    // whose drops still lie inside the shader's lookup window (radius + jitter ≤ W1 = 1.5 cells at the default 5×5
-    // neighbourhood), so the placement is as Poisson as the lookup allows.
+    // One drop per cell on a jittered lattice: regular, but not too regular. A Poisson placement (the cell subdivided
+    // so that only one sub-cell in sub² holds a drop, with overlapping supports) was tried to match the scans'
+    // Clark–Evans ratio of 0.90–0.99, and it does — but it buys that ratio with pairs of drops stuck together, which
+    // the sheets do not show (user, 2026-09-11). The proximity the scans really carry is between drops of DIFFERENT
+    // colours, and that is the constriction's to produce: a later drop pushes the earlier film into the gaps between
+    // its neighbours, which is how paint comes to lie against paint.
     const r0 = Math.min(0.66, (o.r ?? 0.5) * (o.gallMul ?? 1) * (0.55 + 0.45 * p.gall));
-    // `sub` is bounded by the shader's lookup: a drop must be found from at most W1 = 1.5 cells away, so
-    // radius + jitter ≤ 1.5 cells. Below sub ≈ 2.2 the jitter still grows with the subdivision (0.46 · sub); above it
-    // the jitter saturates at a whole cell and only the radius binds.
-    // `sub` is bounded by the shader's lookup: a drop must be found from at most w1 cells away (1.5 in the 5×5
-    // neighbourhood, 1.0 on the cheap 3×3 path a small-drop layer takes), so radius + jitter ≤ w1 and both grow with
-    // the subdivision. Staying inside the layer's own path keeps the frame cost where it was.
-    const w1 = o.small ? 1.0 : 1.5;
+    const cell = o.cell / p.density;
+    const r = r0;
+    const jitter = o.jitter ?? 0.46;
     const ecc = this.landing;   // the ellipse this sheet's drops land as, before any later throw constricts them
-    const sub = Math.max(1, Math.min(1.6, Math.round((100 * w1) / (Math.max(r0 * (1 + ecc), 1e-3) + 0.46)) / 100));   // capped: beyond ~1.6 the placement gains little and the shader's early-out fires later (the still-frame cost doubles)
-    const cell = o.cell / p.density / sub;
-    const r = r0 * sub;
-    // and the drop is thrown anywhere within `sub` sub-cells of its own, not only inside it: the supports of
-    // neighbouring cells overlap, so the positions stop being stratified and two drops may land side by side (a
-    // jittered lattice measures a Clark–Evans ratio of ~1.24 however thin it is; the scans measure 0.90–0.99).
-    const jitter = Math.min(1.0, (o.jitter ?? 0.46) * sub);
+    // A colour thrown in several passes rather than one (the marbler covers the bath, sees the gaps and throws again)
+    // was tried here and taken out again on 2026-09-11. Holding the area a colour COVERS fixed while splitting it into
+    // k independent passes does raise the area it THROWS, which is what shears the films beneath — but only from φ
+    // towards −ln(1 − φ), a fifth to a third more paint, so about a tenth in strain; the measured elongation of dp
+    // 370's colours did not move outside the noise between one pass and two. Four passes cost the frame rate (34 fps
+    // median at 224 ppi, 25 at the tenth percentile) and, because independent passes clump, brought back the pairs of
+    // touching drops that the Poisson placement was removed for.
     const spec: LayerSpec = {
       cellMm: cell,
       jitter,
       radius: r,
       radiusSigma: o.sigma ?? 0.22,
       colours,
-      fill: (o.fill ?? 1) / (sub * sub),
+      fill: o.fill ?? 1,
       animAmp: (o.anim ?? 1) * 0.1,
       breath: p.breath,
       seed: p.seed * 97 + slot * 13 + 1,
-      rMax: o.small ? Math.min(1.0, 0.8 * sub) : 1.0,
+      rMax: o.small ? 0.8 : 1.0,
       shape: o.shape,
       floor: o.floorMm !== undefined ? o.floorMm / 2 / cell : undefined,
     };
@@ -801,22 +804,36 @@ const zebraBase = (b: Builder, round: number[], o: { spacing?: number; sizeMul?:
 /** Nonpareil base: a stone base, the get-gel (a wide comb drawn twice, halving), then a fine comb drawn once
  *  across it. `fine` is the fine comb's spacing: ~4 mm on dp 82; the double combs sit on a coarser nonpareil
  *  (arches 8–10 mm apart, dp 393 and 75), with spots to match. */
-const nonpareilBase = (b: Builder, fine = 8, o: { dir?: number; ripple?: number; bold?: number; plateau?: number; base?: number; beforeFine?: (b: Builder) => void; skipFine?: boolean } = {}) => {
-  // `fine` is the fine comb's pitch, `base` the pitch the stone base and the get-gel are scaled by (the two were one
-  // number until the pitch was measured: on the scans the tongues of a plain nonpareil repeat every 7.6–8.8 mm
-  // (autocorrelation at true scale, dp 82, 289, 300, 21, 284), not the 4 mm they were drawn at, while the colour
-  // bands inside a tongue repeat every 2.4–2.7 mm, which is the base's business and was already fitted).
+const nonpareilBase = (b: Builder, fine = 4, o: { dir?: number; ripple?: number; bold?: number; plateau?: number; base?: number; beforeFine?: (b: Builder) => void; skipFine?: boolean } = {}) => {
+  // `fine` is the fine comb's pitch, `base` the pitch the stone base and the get-gel are scaled by. The scans carry two
+  // fine repeats, ~2.5 mm and ~8 mm (autocorrelation at true scale on dp 82, 289, 300, 21, 284); drawing the comb at
+  // the 8 mm one made the whole pattern too big (user: "I don't know why you suddenly made the Nonpareil combs so
+  // big — they looked the right size before"), so the tine pitch is the 4 mm it was and the V's depth comes from the
+  // pull instead (DEEP_TONGUE).
   const coarse = (o.base ?? 4) / 4;
   const dir = o.dir ?? -90;   // direction the fine comb moves; the get-gel is drawn at right angles to it
   const bold = o.bold ?? 0.55;   // 0.55 (from 0.7): the band width goes as `bold` (the count as 1/bold², the fitter keeping the coverage); at 0.7 the bands inside the tongues measured (area-weighted local width at 0.077 mm/px) p50 0.85 / p90 2.5 mm on both renders against 0.69 / 2.4 on the dp 82 scan and 0.39 / 1.3 on dp 305   // user (2026-09-10): smaller drops, thinner stripes after the get-gel (the 2 of the previous round made columns 5–10 mm wide; the scans' stripes inside a tongue are 0.5–2 mm)   // fewer, larger drops at the same coverage: bands `bold` times wider after the get-gel (dp 82/305: one colour spans a column 5–10 mm wide over several tongues; at 1 every tongue cut three or four colours)
-  // Spots several times the measured fragments, of one size and sparse (a fourteenth of the measured density), so
-  // that drawn out by the get-gel they are bands 5–10 mm wide and each scallop of the fine comb holds one colour
-  // (dp 82). Every sheet on this base was refitted with these sizes.
-  b.turkish({ cell: 16 * Math.sqrt(coarse), sizeMul: 6 * Math.sqrt(coarse) * bold, densityMul: 0.07 / (bold * bold), gallDots: false, shape: 2.5 });
+  // The drops are thrown larger and sparser than the sheet's own fragments, but only by a third now, not by the
+  // fourteenth they were: the drag below is what draws them into bands 5–10 mm wide, where before the band width had
+  // to come from the drop itself. Every sheet on this base is refitted for coverage under these numbers.
+  b.turkish({ cell: 16 * Math.sqrt(coarse), sizeMul: 3 * Math.sqrt(coarse) * bold, densityMul: 0.3 / (bold * bold), gallDots: false, shape: 2.5 });
+  // The bath is dragged once before any comb touches it (user, 2026-09-11): the rake is drawn the length of the bath
+  // and every drop is pulled into a streak along its travel, so what the get-gel then cuts is a field of bands, not a
+  // field of blobs. DRAG is the elongation that one pass gives.
+  b.stretch(dir + 90, DRAG);
   // get-gel: a wide comb drawn twice, halving, with the wake kernel and a 5 mm core: each band moves almost rigidly,
   // drawn long yet still wide. The arc profile here either shears the bands to threads (hard pull) or shows its own
   // arches (gentle pull).
-  b.comb2(dir + 90, 22 * Math.sqrt(coarse), { ripple: 2.2 });   // sharp tines (comb2's 0.5 mm core): each drop the tine crosses is all but cut, the bands between move whole (dp 82; the earlier 5 mm core dragged whole bands and left no cuts)
+  // The cut is the steep thing about a nonpareil, not the length of its tongues (user, 2026-09-11): the get-gel's wake
+  // is screened at an eighth of its spacing rather than the third a comb is given by default, so each tine draws the
+  // paint into its own path within a couple of millimetres and the band between two tines rides along whole. At a
+  // third the bands bowed into one another and the sheet came out busy and fine-lined where dp 82's is broad and
+  // sharply cut; at a sixteenth the notches were too hard (user: "you overdid it a bit"). The share of the sheet whose
+  // bands run across the drag rather than along it, coherence-weighted: dp 305 renders 0.19 against its scan's 0.20
+  // and dp 82 0.08 against 0.24, from 0.09 and 0.12 at a third. (A comb pulled the length of the bath wants the
+  // opposite — a Feather's lines are long and nearly parallel, and at a sixteenth its quill columns broke into notched
+  // bands — so this screening is the nonpareil base's own and not the default.)
+  b.comb2(dir + 90, 22 * Math.sqrt(coarse), { ripple: 2.2, L: 0.35, damp: 22 * Math.sqrt(coarse) / 8 });   // sharp tines: each drop the tine crosses is all but cut, the bands between move whole (dp 82; a 5 mm core dragged whole bands and left no cuts)
   b.jog(dir + 90);   // the bands jog sideways irregularly before the fine comb; the scallops stay regular (dp 284)
   o.beforeFine?.(b);  // a pass on the get-gel bands before the fine comb cuts them
   if (o.skipFine) return b;  // the caller draws its own last comb (Double comb waved: along a wave)
@@ -907,16 +924,17 @@ export const RECIPES: Recipe[] = [
       // passes lobed the spots into blobs and a fine straight get-gel drew them to hair and the colours went to mud.
       // Two-row comb drawn DOWN the sheet (user, 2026-09-11: the direction reversed again): two rows in opposite phase,
       // the wave's amplitude half the separation of adjacent lines, so neighbouring lines touch once a wavelength and
-      // quilt the sheet into closed plumes in staggered rows. The scale is the sheets' own: a plume is half a tine
-      // spacing wide and half a wavelength tall, and on the scans (autocorrelation of the envelope at true scale, dp
-      // 144 at 200 mm, dp 424/434/437/438/464 at 90 mm) the plumes measure 40–50 mm across and 90–110 mm tall, so the
-      // tines sit 88 mm apart and the zigzag repeats every 190 mm. Authored as 44 × 76 they came out 22 × 38, a
-      // quarter of the sheets' (user: fix the Peacock scale). Combed sharply (user): a log wake with a 0.5 mm core, so each tine cuts the paint along its zigzag
+      // quilt the sheet into closed plumes in staggered rows. A plume is half a tine spacing wide and half a
+      // wavelength tall, and the lattice is each sheet's own, read off a 90 mm square of the scan at true scale:
+      // dp 144's plumes are 33 × 45 mm (66 mm sets, 90 mm wave — smaller and squarer than the rest, as the user
+      // says), where the 90 mm samples dp 424 and 464 carry 40–45 mm plumes taller than the sheet (88 mm sets on a
+      // 190 mm wave, the fallback here). Authored as 44 × 76 the plumes came out 22 × 38. Combed sharply (user): a log wake with a 0.5 mm core, so each tine cuts the paint along its zigzag
       // path, all but severing what it crosses, and the rest of each cell moves whole.
       // Square rhombuses (user): the zigzag legs run at 45° to the travel, so the wavelength is four times the amplitude
       // and the two rows, half a period apart into squares standing on a corner. Sets 48 mm apart (adjacent lines
       // 24 mm, amplitude 12, wavelength 48): 48 mm squares, between dp 144's 44 mm width and 54–57 mm row height.
-      b.wavyComb(-90, 88, 22, 190, { alternate: true, ripple: 0.35, kernel: "wake", L: 0.5, damp: 88 / 6, shape: "triangle" });   // the wake screened at a third of the way to the neighbouring row's line (user): the tines cut along their zigzag paths and the eyes between them move whole, where the undamped pull swept the whole sheet into one drift   // stacked 60° rhombuses (user, 2026-09-10: back from the squares): legs at 30° to the travel, λ = 4·amp·√3, cells 44 wide × 76 tall on dp 144 (43.8 × 54–57 measured, the rows stacked); drawn up; ripple 0.35, less drag than the 0.5 of before (user)
+      const pw = pal.wave, PS = pw?.spacing ?? 88;   // the sheet's own plume lattice where it was measured (see the palette's `wave`)
+      b.wavyComb(-90, PS, pw?.amp ?? PS / 4, pw?.len ?? 190, { alternate: true, ripple: 0.35, kernel: "wake", L: 0.5, damp: PS / 6, shape: "triangle" });   // the wake screened at a third of the way to the neighbouring row's line (user): the tines cut along their zigzag paths and the eyes between them move whole, where the undamped pull swept the whole sheet into one drift   // stacked 60° rhombuses (user, 2026-09-10: back from the squares): legs at 30° to the travel, λ = 4·amp·√3, cells 44 wide × 76 tall on dp 144 (43.8 × 54–57 measured, the rows stacked); drawn up; ripple 0.35, less drag than the 0.5 of before (user)
       return b.drift().scene(); } },
 
   { name: "Serpentine", streaks: "h", group: "Combed", palette: "dp164", palettes: ["dp164", "serpentine19", "dp87"], terms: ["serpentine", "waved", "wave"], defaults: { ...D19, ...COMBED_LOOK, viscosity: 0.3 }, note: "Turkish, a one-row comb drawn down and back then across and back, halving, then a slightly wider comb drawn once down the sheet in wavy lines like a snake's track (Miura; dp 69, 164).",

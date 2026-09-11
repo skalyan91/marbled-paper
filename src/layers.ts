@@ -187,7 +187,50 @@ export function buildStatic(spec: LayerSpec): LayerStatic {
       s.bInh[i] = 0.3 + 0.08 * hash01(spec.seed, i * 2 + 1); // inhale : exhale ≈ 1 : 2
     }
   }
+  relaxOverlaps(s, spec);
   return s;
+}
+
+/** Paint cannot land where paint already is. A drop falling beside another shoves it aside as it spreads, so two drops
+ *  of one colour end up touching along a flattened wall — never as two circles with a waist between them, which is what
+ *  a jittered lattice produces whenever two neighbours happen to jitter towards each other (the user, 2026-09-11:
+ *  "peanut-like pairs of dots"). A few passes of mutual separation over the tile turn the placement into a hard-core
+ *  process whose exclusion is the drops' own size: regular where the drops are big for their cell, free where they are
+ *  small, which is what "regular but not too regular" comes to. Offsets stay inside the layer's jitter, so where the
+ *  drops are too big to be separated at all (a ground-forming layer, radius above half a cell) they simply spread as
+ *  evenly as the jitter allows and merge into the film they are meant to be. */
+function relaxOverlaps(s: LayerStatic, spec: LayerSpec) {
+  const J = spec.jitter;
+  if (J <= 0) return;
+  const at = (x: number, y: number) => ((y & (TILE - 1)) * TILE + (x & (TILE - 1)));
+  for (let pass = 0; pass < 4; pass++) {
+    let moved = 0;
+    for (let y = 0; y < TILE; y++) {
+      for (let x = 0; x < TILE; x++) {
+        const i = at(x, y);
+        if (s.r[i] <= 0) continue;
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            if (dx === 0 && dy === 0) continue;
+            const j = at(x + dx, y + dy);
+            if (s.r[j] <= 0 || j <= i) continue;   // each pair once
+            const px = dx + s.jx[j] - s.jx[i], py = dy + s.jy[j] - s.jy[i];
+            const d = Math.hypot(px, py);
+            const want = s.r[i] + s.r[j];
+            if (d >= want || d < 1e-6) continue;
+            const push = Math.min((want - d) * 0.5, 0.25);   // half the overlap each, and never a wild jump
+            const ux = px / d, uy = py / d;
+            s.jx[i] = Math.max(-J, Math.min(J, s.jx[i] - ux * push));
+            s.jy[i] = Math.max(-J, Math.min(J, s.jy[i] - uy * push));
+            s.jx[j] = Math.max(-J, Math.min(J, s.jx[j] + ux * push));
+            s.jy[j] = Math.max(-J, Math.min(J, s.jy[j] + uy * push));
+            moved++;
+          }
+        }
+      }
+    }
+    if (!moved) break;
+  }
 }
 
 export class LayerBank {
