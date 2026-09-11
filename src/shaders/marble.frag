@@ -56,6 +56,16 @@ vec4 hash4fast(ivec2 c, int k) { uint h = pcg(uint(c.x) * 1597334677u ^ uint(c.y
 // lod = log2(texels per pixel); the texture is 256 texels per unit
 vec4 tnoise(vec2 p, float lod) { return textureLod(uNoise, p, lod); }
 float lodFor(float lodMmPerPx, float cyclesPerMm) { return lodMmPerPx + log2(cyclesPerMm * 256.0); }
+// lodFor puts one texel on one pixel, which is right for the red channel (white noise per texel: the texel *is* the
+// feature). The green, blue and alpha channels carry a value lattice whose finest cell is 2 texels or more, so once a
+// pixel spans more than a texel that cell is already under the pixel at the level lodFor picks and the sheet grits up
+// at life size: the bare paper's 0.1 mm band measured 1.8 times the scan's on dp 25 at 235 dpi where it matched it at
+// 550 dpi. A two-texel cell is one octave coarser and the level is in octaves, so the blur ramps to a full octave as
+// the cell falls below two pixels and is nothing while it is still resolved (400–700 ppi, where the scans are
+// measured: blurring there cost a tenth of the bare paper's rms, 0.0129 against 0.0142 on a sheet with nothing
+// thrown on it). Doubling the level instead adds `lod` octaves, the same thing only near lod 1 where this was first
+// checked; by lod 2, the sheet at 110 ppi, it costs a seventh of the rms (0.0048 against 0.0056).
+float lodCell(float lod) { return lod + clamp(lod, 0.0, 1.0); }
 
 // Worley F1/F2 in an arbitrary 2D space (unit cells), returns (F1, F2)
 vec2 worley(vec2 p, int seed) {
@@ -140,7 +150,7 @@ const float W0 = 0.9, W1 = 1.5;
 // global time order for every pixel that keeps the loop uniform across a warp.
 // (Within one colour layer the drop order is visually irrelevant: same-colour drops merge.)
 // One candidate cell of a sprinkle layer (see invSprinkle). Windows w0/w1 in cells.
-void candidate(inout Trace t, inout vec2 g, inout mat2 Jg, inout bool stop, ivec2 cc, vec2 sh, int slot, float cell, vec4 a, vec4 c, mat2 R, float bw, float w0, float w1) {
+void candidate(inout Trace t, inout vec2 g, inout mat2 Jg, inout bool stop, ivec2 cc, vec2 sh, int slot, float cell, vec4 a, vec4 c, mat2 R, float bw, float w0, float w1, float ecc) {
   vec4 tx = texelFetch(uCells, ivec3(cc & (TILE - 1), slot), 0);
   if (tx.z <= 0.0) return;
   vec2 C = vec2(cc) + 0.5 + tx.xy + sh;   // the drop's row or column has slid by sh cells
@@ -149,12 +159,19 @@ void candidate(inout Trace t, inout vec2 g, inout mat2 Jg, inout bool stop, ivec
   float r = tx.z;
   if (d >= w1) return;                      // outside the window: identity
   vec2 n = q / max(d, 1e-6);
+  vec4 hw = hash4fast(cc, slot + 300) * 2.0 - 1.0;
+  float c2 = n.x * n.x - n.y * n.y, s2 = 2.0 * n.x * n.y;
+  // A drop flicked off the brush arrives with the speed of the throw and lands as an ellipse, its long axis along
+  // its flight. `ecc` is that ellipse, measured: the last colour of a stone sheet is the one no later throw has
+  // constricted, and on the scans it still stands at 1.3-1.7 to 1. Every drop of the sheet is given that ellipse,
+  // with its own axis and its own share of it (hw), and all the stretching beyond it is the work of the later
+  // throws pushing the film aside. The same 2-theta term carries the paper's pull on a thin outline.
+  float rm = ecc * (hw.x * c2 + hw.y * s2);
   if (c.y > 0.0 && d < r * 1.6) {           // irregular outline on thin sizes
-    vec4 hw = hash4fast(cc, slot + 300) * 2.0 - 1.0;
-    float c2 = n.x * n.x - n.y * n.y, s2 = 2.0 * n.x * n.y;
     float c3 = n.x * (4.0 * n.x * n.x - 3.0), s3 = n.y * (3.0 - 4.0 * n.y * n.y);
-    r *= 1.0 + c.y * (0.6 * (hw.x * c2 + hw.y * s2) + 0.4 * (hw.z * c3 + hw.w * s3));
+    rm += c.y * (0.6 * (hw.x * c2 + hw.y * s2) + 0.4 * (hw.z * c3 + hw.w * s3));
   }
+  r *= 1.0 + max(rm, -0.85);
   float gradD = length(vec2(dot(n, Jg[0]), dot(n, Jg[1])));   // cells per pixel across the outline
   float ePx = (r - d) / max(gradD, 1e-6);
   bool inside = d < r;
@@ -276,7 +293,8 @@ void invSprinkle(inout Trace t, vec4 a, vec4 b, vec4 c, vec4 d4) {
   // two crossing streams: the drops of even grid rows slide along x (each row by its own amount),
   // those of odd rows slide along y (each column by its own amount); the candidate cells are found per stream
   int N = d4.x > 0.5 ? 1 : NEIGH;   // small-drop layer (r ≤ 0.8 cell): a 3×3 neighbourhood with a 1-cell window suffices
-  float w0 = d4.x > 0.5 ? 0.6 : W0, w1 = d4.x > 0.5 ? 1.0 : W1;
+  float w0 = d4.x > 0.5 ? 1.0 : W0, w1 = d4.x > 0.5 ? 1.5 : W1;
+  float ecc = d4.w;   // the ellipse a thrown drop lands as, before any later throw constricts it (see candidate)
   for (int oy = NEIGH; oy >= -NEIGH; oy--) {
     if (oy > N || oy < -N) continue;
     int cy = baseY + oy;
@@ -285,7 +303,7 @@ void invSprinkle(inout Trace t, vec4 a, vec4 b, vec4 c, vec4 d4) {
     int bx = int(floor(g0.x - sh));
     for (int ox = NEIGH; ox >= -NEIGH; ox--) {
       if (stop || ox > N || ox < -N) continue;
-      candidate(t, g, Jg, stop, ivec2(bx + ox, cy), vec2(sh, 0.0), slot, cell, a, c, R, bw, w0, w1);
+      candidate(t, g, Jg, stop, ivec2(bx + ox, cy), vec2(sh, 0.0), slot, cell, a, c, R, bw, w0, w1, ecc);
     }
   }
   for (int ox = NEIGH; ox >= -NEIGH; ox--) {
@@ -297,7 +315,7 @@ void invSprinkle(inout Trace t, vec4 a, vec4 b, vec4 c, vec4 d4) {
       if (stop || oy > N || oy < -N) continue;
       int cy = by + oy;
       if ((cy & 1) == 0) continue;
-      candidate(t, g, Jg, stop, ivec2(cx, cy), vec2(0.0, sh), slot, cell, a, c, R, bw, w0, w1);
+      candidate(t, g, Jg, stop, ivec2(cx, cy), vec2(0.0, sh), slot, cell, a, c, R, bw, w0, w1, ecc);
     }
   }
   if (!t.done) { t.S = b.xy + transpose(R) * (g * cell); t.J = transpose(R) * Jg * cell; }
@@ -551,37 +569,57 @@ float stretchOf(mat2 J) {
 }
 float lodOf(mat2 J) { float m = max(length(J[0]), length(J[1])); return log2((m < 1e6 && m > 0.0) ? max(m, 1e-6) : 1e6); }
 
-// Paper surface: returns colour; writes fibre (−1..1, anisotropic streaks) and tooth (0..1, hollows = 0)
+// Paper surface: returns colour; writes fibre (−1..1, the fibre grain a paint edge creeps along) and tooth (0..1, hollows = 0)
 vec3 paperColor(vec2 P, float soft, float lodScr, out float fibre, out float tooth, out float grain) {
-  vec2 q = P * 0.02;
-  float f1 = tnoise(q * vec2(0.7, 4.0), lodFor(lodScr, 0.08)).a, f2 = tnoise(q * vec2(4.0, 0.7) + 0.37, lodFor(lodScr, 0.08)).a;
-  float fib = (f1 + f2) - 1.0;
+  // Every term below is a lattice in the noise texture. Sampling them all on the sheet's own axes, several of them
+  // at nearly the same pitch, made the lattices reinforce into a regular 0.1–0.2 mm grid and the bare paper read as
+  // woven cloth: the render's autocorrelation at 0.2 mm was 0.33–0.48 across the sheet and the same down it, where
+  // the scans of dp 25, 81, 177, 453 read 0.02–0.25 and never the same both ways. Each octave is turned through its
+  // own angle instead, so no two texel lattices line up and none of them lies square with the sheet.
+  vec2 pA = vec2(P.x * 0.940 - P.y * 0.342, P.x * 0.342 + P.y * 0.940);   //  20°
+  vec2 pB = vec2(P.x * 0.788 + P.y * 0.616, P.y * 0.788 - P.x * 0.616);   // −38°
+  vec2 pC = vec2(P.x * 0.454 - P.y * 0.891, P.x * 0.891 + P.y * 0.454);   //  63°
+  // Formation streaks: the fibres felt together with a mild preferred direction. Two perpendicular streak fields
+  // added together (what this was) are a plaid, not a felt, and the plaid was the coarsest thing on the bare paper.
+  float fib = tnoise(pA * vec2(0.045, 0.072) + 0.37, lodCell(lodFor(lodScr, 0.072))).a - 0.5;   // 0.11 mm across the fibres, 1.6:1 along them
   float fine = tnoise(P * 0.35, lodFor(lodScr, 0.35)).r - 0.5;
-  float mid = tnoise(P * 0.09 + 0.3, lodFor(lodScr, 0.09)).a - 0.5;
+  float mid = tnoise(pC * 0.09 + 0.3, lodCell(lodFor(lodScr, 0.09))).a - 0.5;
   float low = tnoise(P * 0.004 + 0.11, lodFor(lodScr, 0.004)).g - 0.5;
   // surface relief at fixed physical scales, whatever the zoom: fibre flocs (0.4 mm), formation
   // mottle (1 and 0.5 mm) and fibre fuzz (0.2 and 0.1 mm). Measured on 400 ppi scans of 19th-c.
   // book covers, every colour carries this mottle; it is what makes the sheet read as paper.
   float floc = tnoise(P * 0.078 + 0.53, lodFor(lodScr, 0.078)).b - 0.5;
   float form = tnoise(P * 0.125 + 0.21, lodFor(lodScr, 0.125)).g - 0.5;
-  float fuzz = tnoise(P * 0.078 + 0.77, lodFor(lodScr, 0.078)).a - 0.5;
-  // The grain a paint edge follows: on the 400–600 dpi scans (dp 80, 97, 102) every outline is ragged at 0.1–0.4 mm,
-  // the paint having crept along the fibres it met, with a streaky anisotropy along the fibre direction; nothing of the
-  // 3–70 mm wander the old term carried, which was invisible at the bleed's scale. Fixed physical scales (0.12 and 0.35 mm).
-  // Sampled so that the texture's *texels* are the fibre features (the red channel is white noise per texel; a repeat
-  // of 256 texels over 25 mm puts one texel at 0.1 mm), which the mip chain then averages correctly at any zoom. The
-  // earlier sampling at 3–16 cycles per mm mapped the repeat to 0.06–0.3 mm and read a near-constant 4-texel mip.
-  float g0 = tnoise(P * vec2(0.025, 0.055) + 0.29, lodFor(lodScr, 0.055)).r - 0.5;   // 0.1 mm fuzz, streaked 2:1
-  float g1 = tnoise(P * vec2(0.012, 0.02) + 0.13, lodFor(lodScr, 0.02)).r - 0.5;     // 0.2–0.35 mm
-  float g2 = tnoise(P * vec2(0.006, 0.01) + 0.61, lodFor(lodScr, 0.01)).r - 0.5;     // 0.4–0.7 mm
+  float fuzz = tnoise(pB * 0.078 + 0.77, lodCell(lodFor(lodScr, 0.078))).a - 0.5;
+  // The grain a paint edge follows and the grain a film is absorbed into: on the 400–600 dpi scans (dp 80, 97, 102)
+  // every outline is ragged at 0.1–0.4 mm, the paint having crept along the fibres it met; nothing of the 3–70 mm
+  // wander the old term carried, which was invisible at the bleed's scale. Sampled so that the texture's *texels*
+  // are the fibre features (the red channel is white noise per texel; a repeat of 256 texels over 25 mm puts one
+  // texel at 0.1 mm), which the mip chain then averages correctly at any zoom. The earlier sampling at 3–16 cycles
+  // per mm mapped the repeat to 0.06–0.3 mm and read a near-constant 4-texel mip.
+  // Isotropic, and each octave turned through its own angle. Each was sampled with its x frequency half its y one
+  // and the mip level taken from the y frequency, which both stretched every feature across the sheet and blurred
+  // it a further octave in x: the mottle inside a film came out 2–3 times longer across the sheet than down it
+  // (autocorrelation at 0.2 mm 0.39 across against 0.11 down, dp 97 and 102; 1.35–1.52 times the gradient down
+  // against across on dp 80, 81, 233, 446, 453) where the scans are isotropic to within a few per cent. Each
+  // octave now samples at the geometric mean of its two old frequencies, so the texel sizes (0.105, 0.25, 0.5 mm)
+  // and the rms are what they were, and the lod is right on both axes.
+  float g0 = tnoise(pB * 0.0371 + 0.29, lodFor(lodScr, 0.0371)).r - 0.5;     // 0.105 mm fibre fuzz
+  float g1 = tnoise(pC * 0.0155 + 0.13, lodFor(lodScr, 0.0155)).r - 0.5;     // 0.25 mm
+  float g2 = tnoise(pA * 0.00775 + 0.61, lodFor(lodScr, 0.00775)).r - 0.5;   // 0.5 mm
   fibre = clamp(g0 * 1.0 + g1 * 1.6 + g2 * 1.2, -1.0, 1.0);   // the edge's displacement: fibre fuzz and streaks together, so the fringe is ragged, not lumpy
   // The take-up of a film into the fibre mat: the paint is absorbed unevenly, thicker in the hollows and where the
   // fibres are dense, so the reflectance of every colour is speckled at the fibres' own scale. On the 400–600 dpi
   // scans the log-reflectance inside a film has an rms of 0.09–0.10 below 0.2 mm and 0.04–0.07 per octave from 0.2
   // to 1.6 mm, 0.15–0.21 in all (dp 97, 102). Zero mean, so the median colour the calibration matches is unchanged.
   grain = 0.55 * g0 + 0.5 * g1 + 0.3 * g2 + 0.3 * floc + 0.25 * form;   // weights set so a 600 ppi render of dp 102 gives the scan's band rms (0.1 mm ~0.07, 0.2–1.6 mm ~0.04 per octave)
-  tooth = clamp(0.5 + 1.2 * floc + 0.9 * form + 0.8 * fuzz + 0.35 * fib + 0.3 * fine + 0.3 * mid + 0.35 * g1 + 0.25 * g2, 0.0, 1.0);   // and the fibre-scale grain: the film's take-up is stippled at 0.1–0.3 mm on the scans, not only mottled at 0.5–1 mm
-  vec3 c = uPaper.rgb * (1.0 + 0.08 * fib + 0.05 * fine + 0.04 * mid + 0.06 * floc + 0.05 * form + 0.04 * fuzz);
+  tooth = clamp(0.5 + 1.2 * floc + 0.9 * form + 0.8 * fuzz + 0.55 * fib + 0.3 * fine + 0.3 * mid + 0.35 * g1 + 0.25 * g2, 0.0, 1.0);   // and the fibre-scale grain: the film's take-up is stippled at 0.1–0.3 mm on the scans, not only mottled at 0.5–1 mm
+  // The bare sheet. Over dp 25, 81, 177, 453 and 455, where both the render and the scan show a real expanse of
+  // paper at 430–560 dpi, the band rms of the render's log-reflectance ran 0.93 / 1.33 / 1.52 / 1.57 / 1.33 times
+  // the scan's over 0.1 / 0.2 / 0.4 / 0.8 / 1.6 mm: right at the fibres' own scale, half again too rough at every
+  // scale above it. The excess is the mottle, so the two mottle terms are cut to two thirds and the fine ones left
+  // nearly alone.
+  vec3 c = uPaper.rgb * (1.0 + 0.090 * fib + 0.05 * fine + 0.035 * mid + 0.034 * floc + 0.030 * form + 0.035 * fuzz);
   // laid and chain lines of hand-made paper (visible where the sheet is thinner)
   if (uBleed.w > 0.5) {
     float laid = 0.5 + 0.5 * sin(6.2831853 * P.y / uPaperTex.x + 0.7 * fine);

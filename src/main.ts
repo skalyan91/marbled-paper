@@ -767,6 +767,8 @@ function fitRecipe(name: string, iters = 8, paletteKey?: string) {
     markDirty();
     return { key, spots: pal.spots.map((ci) => [pal.pigments[ci].name, pal.pigments[ci].d50]), bg: pal.bg, log };
   },
+  /** recompile the fragment shader (after changing settings that are compiled in, e.g. the drop neighbourhood) */
+  rebuildProgram: () => { buildProgram(); markDirty(); },
   measureCoverage: measureCoverage,
   measureExact: () => measureExact(paletteObj),
   fitRecipe,
