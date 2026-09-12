@@ -241,7 +241,12 @@ const PALETTES_RAW: Palette[] = [
     pigments: [B("red", "#AD3149", 21.7, 0.96, 0.5), F("indigo", "#3E3C70", 8.1, 0.98, 2.48, 0.53, 0.95, 0.5), F("dark teal", "#374144", 5.9, 0.91, 1.65, 0.49, 0.95, 0.5), F("maroon", "#7E4F5A", 35.9, 2.57, 2.97, 0.43, 0.95, 0.5), F("orange", "#BA6154", 11.8, 0.98, 1.6, 0.54, 0.95, 0.5), F("cream", "#DAA995", 16.6, 1.66, 1.32, 0.46, 0.95, 0.5), WHITE],
     background: 0, spots: [1, 2, 3, 4, 5], paperPct: 0.0, white: 6 },
   { key: "dp75", name: "19th-c. Double comb waved (dp 75): crimson, red, grey-blue, tan, orange, pale pink", source: "dp 75", streak: [73.2, 0.214, 59.4, 0.074], paper: "#E4D4B8",
-    pigments: [B("crimson", "#7E000A", 61.4, 0.96, 0.5), F("red", "#922C2D", 11.8, 0.35, 0.83, 0.17, 0.95, 0.5), F("grey-blue", "#806773", 7.3, 0.45, 1.51, 0.59, 0.95, 0.5), F("tan", "#CD6A5D", 7.0, 0.5, 0.68, 0.21, 0.95, 0.5), F("orange", "#EF9755", 5.7, 0.63, 1.41, 0.5, 0.95, 0.5), F("pale pink", "#FFC6B2", 6.8, 1.12, 1.1, 0.44, 0.95, 0.5), WHITE],
+    // grey-blue and orange d50 (were 1.51, 1.41 — the largest of the spots, both with a heavier-than-usual sig too)
+    // rendered as the thickest bands on the sheet (user, 2026-09-12: dp 75 "especially the yellow and blue ones" —
+    // orange and grey-blue are what read that way here), against a scan where they're thin threads among the
+    // crimson/tan tongues: cut to keep the spot in scale with the rest while leaving frac/perCm2 (measured
+    // independently of size) alone.
+    pigments: [B("crimson", "#7E000A", 61.4, 0.96, 0.5), F("red", "#922C2D", 11.8, 0.35, 0.83, 0.17, 0.95, 0.5), F("grey-blue", "#806773", 7.3, 0.45, 0.95, 0.59, 0.95, 0.5), F("tan", "#CD6A5D", 7.0, 0.5, 0.68, 0.21, 0.95, 0.5), F("orange", "#EF9755", 5.7, 0.63, 0.9, 0.5, 0.95, 0.5), F("pale pink", "#FFC6B2", 6.8, 1.12, 1.1, 0.44, 0.95, 0.5), WHITE],
     background: 0, spots: [1, 2, 3, 4, 5], paperPct: 0.0, white: 6 },
   { key: "dp87", name: "19th-c. Gloster on Serpentine (dp 87): red, indigo, dark grey, maroon, speckled grey, ochre", source: "dp 87", streak: [104.6, 0.121, 95.5, 0.126], paper: "#D9CBC6",
     pigments: [B("red", "#801323", 35.6, 0.96, 0.5), F("indigo", "#37405B", 16.3, 0.7, 2.87, 0.72, 0.95, 0.5), F("dark grey", "#3E3D3A", 8.5, 0.62, 2.16, 0.69, 0.95, 0.5), F("maroon", "#6D2F33", 14.2, 1.65, 0.55, 0.4, 0.95, 0.5), F("grey", "#948D90", 15.7, 0.83, 2.4, 0.5, 0.95, 0.5), F("ochre", "#AC714A", 8.6, 0.41, 0.58, 0.68, 0.95, 0.5), WHITE],
@@ -989,9 +994,9 @@ export const RECIPES: Recipe[] = [
       // `dir: 90` (2026-09-12, user: "you reversed the large combs without reversing the small ones! The small
       // tongues should also be combed downwards"): the fine nonpareil comb's own direction, inside `nonpareilBase`,
       // had stayed at the default -90 when only the wavyComb below was flipped — both need to run the same way.
-      const b = nonpareilBase(new Builder(p, pal), 2.5, { dir: 90, ripple: 2.2, plateau: 12, base: 8.6, width: 0.2, pull: 25 });   // width 0.2 (was 0.3, 2026-09-12: user, "should have a narrower wake" — tested switching the wavyComb below to a wake kernel first, which lost the nested tongue shape entirely; narrowing width instead keeps the shape and thins the bands)
+      const b = nonpareilBase(new Builder(p, pal), 2.5, { dir: 90, ripple: 2.2, plateau: 12, base: 8.6, width: 0.2, pull: 40 });   // width 0.2 (was 0.3, 2026-09-12: user, "should have a narrower wake" — tested switching the wavyComb below to a wake kernel first, which lost the nested tongue shape entirely; narrowing width instead keeps the shape and thins the bands)   // pull 40 (was 25, 2026-09-12: user, "the tongues should be stretched out more") — draws the get-gel further before the wavyComb below ever touches it
       const w = pal.wave; // the wave is the sheet's own (tongue-lean field, 2-D spectrum + sinusoid fit): period 108 mm and amplitude 17 mm on dp 75 (lean ±45°, path slope 1), 88 mm and 10 mm on dp 389 (lean ±36°)
-      b.wavyComb(90, 10, w?.amp ?? 15, w?.len ?? 105, { alternate: false, ripple: 8, plateau: 12 }); // direction +90 (was -90, mirrored); ripple 8 (was 3) for longer, denser bands
+      b.wavyComb(90, 10, w?.amp ?? 15, w?.len ?? 105, { alternate: false, ripple: 14, plateau: 12 }); // direction +90 (was -90, mirrored); ripple 14 (was 8, then 3, 2026-09-12: user, "stretched out more") for longer, denser bands
       return b.drift().scene(); } },
 
   { name: "Bouquet", streaks: "v", group: "Combed", palette: "dp172", palettes: ["dp172"], terms: ["bouquet", "fern"], defaults: { ...D19, ...COMBED_LOOK, viscosity: 0.3 }, note: "Nonpareil base, then a comb with two rows of teeth drawn down the sheet in a loose wave: each nonpareil column fans out into a small bouquet (Miura; dp 172).",
