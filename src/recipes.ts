@@ -356,15 +356,6 @@ const THROWS = 4;
  *  neighbouring path is half a spacing away and the recipe passes spacing/6. */
 const CONFINE = 1 / 3;
 
-/** 1/sqrt(mean of (0.5+0.5·sinθ)^(2·gamma)) — see LayerSpec.colBias's `comp`: the radius multiplier needed to keep a
- *  column-clumped colour's average area equal to what it would have been unclumped, for a given contrast `gamma`. */
-function colBiasComp(gamma: number): number {
-  const N = 720;
-  let sum = 0;
-  for (let i = 0; i < N; i++) { const t = (2 * Math.PI * i) / N; sum += Math.pow(0.5 + 0.5 * Math.sin(t), 2 * gamma); }
-  return 1 / Math.sqrt(sum / N);
-}
-
 export class Builder {
   ops: Op[] = [];
   layers: LayerSpec[] = [];
@@ -401,7 +392,7 @@ export class Builder {
   private rnd(i: number) { return hash01(this.p.seed + 1, this.n * 131 + i + 17); }
 
   /** Sprinkle a layer. cellMm and radius (cells) are nominal; density/gall scale them. */
-  sprinkle(colours: number[], o: { cell: number; r?: number; sigma?: number; jitter?: number; fill?: number; style?: number; styleParam?: number; wobble?: number; gallMul?: number; anim?: number; ring?: number; small?: boolean; gapFill?: number; shape?: number; floorMm?: number; cross?: number; colBias?: { dirDeg: number; period: number; phase: number; gamma: number; comp: number } }) {
+  sprinkle(colours: number[], o: { cell: number; r?: number; sigma?: number; jitter?: number; fill?: number; style?: number; styleParam?: number; wobble?: number; gallMul?: number; anim?: number; ring?: number; small?: boolean; gapFill?: number; shape?: number; floorMm?: number; cross?: number; colBias?: { dirDeg: number; period: number; phase: number; lo: number; hi: number } }) {
     const slot = this.layers.length;
     if (slot >= 8) return this;
     const p = this.p;
@@ -464,7 +455,7 @@ export class Builder {
   }
 
   /** Sprinkle by measured statistics: spots per cm², median diameter (mm), log-normal spread. */
-  sprinkleStats(colour: number, st: { perCm2: number; d50: number; sig: number; wk?: number }, o: { style?: number; styleParam?: number; anim?: number; densityMul?: number; sizeMul?: number; wobble?: number; jitter?: number; minDens?: number; colBias?: { dirDeg: number; period: number; phase: number; gamma: number; comp: number } } = {}) {
+  sprinkleStats(colour: number, st: { perCm2: number; d50: number; sig: number; wk?: number }, o: { style?: number; styleParam?: number; anim?: number; densityMul?: number; sizeMul?: number; wobble?: number; jitter?: number; minDens?: number; colBias?: { dirDeg: number; period: number; phase: number; lo: number; hi: number } } = {}) {
     const dens = st.perCm2 * (o.densityMul ?? 1);
     const cellMm = 10 / Math.sqrt(Math.max(o.minDens ?? 0.05, dens));   // the 0.05 floor is part of every fitted sheet's regime; Placard's few huge drops pass minDens 0.006
     const r = (st.d50 * 1.35 * (o.sizeMul ?? 1)) / 2 / cellMm; // ×1.35: scan components are fragmented by later colours; clamped ≤ 0.8 cell in the bake
@@ -614,7 +605,7 @@ export class Builder {
   /** Turkish / stone base, laid as on the 17th–18th-c. sheets: the background colour thrown
    *  first and generously (it keeps 25–45 % of the area), then the spot colours in laying order
    *  with their measured size distributions, then gall water as small clear spots. */
-  turkish(o: { spots?: number; cell?: number; bgCell?: number; bgR?: number; bgFill?: number; lastStyle?: number; lastParam?: number; ringed?: boolean; fill?: number; gallDots?: boolean; skipBackground?: boolean; sizeMul?: number; densityMul?: number; gold?: boolean; ground?: number; exclude?: number[]; shape?: number; paperCells?: boolean; colClump?: { dirDeg: number; period: number; gamma?: number } } = {}) {
+  turkish(o: { spots?: number; cell?: number; bgCell?: number; bgR?: number; bgFill?: number; lastStyle?: number; lastParam?: number; ringed?: boolean; fill?: number; gallDots?: boolean; skipBackground?: boolean; sizeMul?: number; densityMul?: number; gold?: boolean; ground?: number; exclude?: number[]; shape?: number; paperCells?: boolean; colClump?: { dirDeg: number; period: number } } = {}) {
     const pal = this.pal;
     const cell = o.cell ?? 12;
     const groundIdx = o.ground ?? pal.background;
@@ -638,6 +629,14 @@ export class Builder {
       if ((g.frac ?? 0) >= 1 && g.d50) this.sprinkleStats(pal.gold, this.statsOf(pal.gold, { perCm2: 0.6, d50: 2, wk: 0.9 }), { style: STYLE.METALLIC, sizeMul: o.sizeMul, densityMul: o.densityMul });
     }
     const ns = Math.min(o.spots ?? pal.spots.length, pal.spots.length);
+    // Which spots get a DOMINANT favour range rather than an ACCENT one (see the colClump loop below): the top
+    // ~quarter by measured frac, since a scan's own thick colours are its most abundant spots (dp 17: maroon 2 at
+    // 14 % and purple at 10 % against green/red/red 2/ochre/blue's 6-10 %) — a clear-enough gap in this and every
+    // other sheet checked, even where the fracs are otherwise fairly close together, to draw the line there rather
+    // than at the middle of the pack. Ranked among the colours actually thrown here (o.exclude removed).
+    const thrown = pal.spots.slice(0, ns).filter((c) => !o.exclude?.includes(c));
+    const byFrac = [...thrown].sort((a, b) => (pal.pigments[b].frac ?? 0) - (pal.pigments[a].frac ?? 0));
+    const dominantSet = new Set(byFrac.slice(0, Math.max(1, Math.round(byFrac.length * 0.28))));
     // The spots are drawn out by the throws that follow them, and by nothing else. A colour thrown onto the bath
     // pushes every film already there out of the disc it spreads over (the drop map in marble.frag, area-preserving
     // after Jaffer), so the colours thrown first are squeezed between the later drops into the vein colours of the
@@ -656,11 +655,16 @@ export class Builder {
       if (last && o.lastStyle) style |= o.lastStyle;
       const st = { perCm2: pg.perCm2 ?? 1.2, d50: pg.d50 ?? 2.2, sig: pg.sig ?? 0.6, wk: o.shape ?? pg.wk };
       // Every spot colour reads the same shared column field (see LayerSpec.colBias) but at its own phase, spread
-      // evenly round the circle by its own index among the spots rather than left to a hash's luck: with as few as
-      // six or seven spot colours a hashed phase can leave two of them nearly in step (both favouring the same
-      // columns, a third never favoured anywhere), which golden-angle spacing avoids.
-      const clumpGamma = o.colClump?.gamma ?? 1.5;
-      const colBias = o.colClump ? { dirDeg: o.colClump.dirDeg, period: o.colClump.period, phase: i * 2.399963, gamma: clumpGamma, comp: colBiasComp(clumpGamma) } : undefined;
+      // evenly round the circle by its own index among the spots rather than left to a hash's luck (golden-angle
+      // spacing avoids two colours landing nearly in step). A dominant colour's own [lo, hi] sits high — always at
+      // least moderately present, occasionally more — so it reads as continuous thick bands; an accent colour's
+      // sits low — almost absent, briefly moderate — so it reads as an occasional thin one. Giving every colour the
+      // same range and varying only its phase (the first version of this mechanism) just gave each one a turn,
+      // which wasn't decisive enough (user, 2026-09-12: dp 17 was "still showing too many thin bands, as opposed to
+      // thick bands of red and blue, and thin bands of green and cream" — a hierarchy of WHICH colours are which,
+      // not just when).
+      const [lo, hi] = dominantSet.has(c) ? [0.6, 1.4] : [0.15, 0.6];
+      const colBias = o.colClump ? { dirDeg: o.colClump.dirDeg, period: o.colClump.period, phase: i * 2.399963, lo, hi } : undefined;
       this.sprinkleStats(c, st, { style, styleParam: last ? o.lastParam : undefined, sizeMul: o.sizeMul, densityMul: o.densityMul, colBias });
     }
     // Gall water sprinkled last: small clear spots that open the film. A separate layer,

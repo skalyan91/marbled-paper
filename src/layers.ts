@@ -44,16 +44,20 @@ export interface LayerSpec {
   // A single-colour layer's own share of a shared, sheet-wide column favouritism: a low-frequency sinusoid in the
   // sheet's own bath mm (not this layer's own randomly rotated grid, so every colour's layers read the same
   // columns), one period per `period` mm along direction `dirDeg`, this colour's own phase offset (so different
-  // colours favour different columns), lifted to `gamma` before it multiplies the drawn radius. Independent
-  // per-colour phases mean any one column can land any one colour strongly favoured (its radius multiplied up
-  // toward the crest) while the others are all near a trough at once — most colours thin to near nothing there
-  // rather than all sharing the column evenly, which is what turns into a nonpareil's "mostly a couple of thick
-  // colours, with occasional thin bands of the others" once combed, rather than one uniform fine mix throughout
-  // (user, 2026-09-12: dp 17's bands "mostly thick reds and blues with occasional thin cream and green"). `comp`
-  // restores the radius's own mean (a `gamma`-lift of a 0..1 sinusoid pulls the mean below 0.5, thinning the
-  // colour's average coverage below its fitted target unless compensated) — the caller passes 1/sqrt(mean of
-  // favour^(2·gamma)) it measured for its own `gamma`, since that mean has no simple closed form off half-integers.
-  colBias?: { dirDeg: number; period: number; phase: number; gamma: number; comp: number };
+  // colours favour different columns). The sinusoid (0..1) is rescaled to [lo, hi] before it multiplies the drawn
+  // radius: a DOMINANT colour's own lo/hi sit high (e.g. 0.6..1.4 — always at least present, sometimes bigger) so
+  // it reads as continuous thick bands with only a shallow dip, never really thinning to nothing; an ACCENT
+  // colour's sit low (e.g. 0.15..0.6 — mostly faint, briefly moderate) so it reads as an occasional thin band
+  // between the dominant ones. Equal lo/hi for every colour (as a plain `gamma`-lift of a symmetric sinusoid gives:
+  // every colour spends exactly half its own period above its own mean, so it merely gets a "turn" rather than
+  // being reliably one or the other) wasn't decisive enough on its own (user, 2026-09-12, on a first pass at this
+  // mechanism: dp 17's bands were "still showing too many thin bands, as opposed to thick bands of red and blue and
+  // thin bands of green and cream" — a designed hierarchy of which colours are which, not just differing phases of
+  // one shared shape). No compensating rescale here, deliberately: giving the dominant tier MORE than its fitted
+  // average coverage and the accent tier LESS is the point, not a side effect to undo — restoring each colour's own
+  // mean (an earlier version of this field did) put every column's total ink back where it started and mostly
+  // cancelled the redistribution's own visual effect.
+  colBias?: { dirDeg: number; period: number; phase: number; lo: number; hi: number };
 }
 
 interface LayerStatic {
@@ -197,8 +201,9 @@ export function buildStatic(spec: LayerSpec): LayerStatic {
         const gx = x + 0.5 + s.jx[i], gy = y + 0.5 + s.jy[i];
         const mx = ocx + (rotC * gx - rotS * gy) * spec.cellMm, my = ocy + (rotS * gx + rotC * gy) * spec.cellMm;
         const proj = mx * biasDirC + my * biasDirS;
-        const favour = 0.5 + 0.5 * Math.sin((2 * Math.PI * proj) / cb.period + cb.phase);
-        rr *= Math.pow(favour, cb.gamma) * cb.comp;
+        const raw = 0.5 + 0.5 * Math.sin((2 * Math.PI * proj) / cb.period + cb.phase);
+        const favour = cb.lo + (cb.hi - cb.lo) * raw;
+        rr *= favour;
       }
       s.r[i] = present ? Math.min(spec.rMax ?? 1.0, rr) : 0;
       const bx = Math.floor(x / k), by = Math.floor(y / k);
