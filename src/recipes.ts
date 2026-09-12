@@ -956,7 +956,10 @@ export const RECIPES: Recipe[] = [
       // baseline `nonpareilBase`'s `widthStretch` uses); `pull` 25 is the get-gel's own draw length, not the 2.2
       // local-cusp default. The wavyComb direction below was mirrored from the scan (found by direct render
       // comparison, not derivable from the axis algebra) and its ripple deepened for the longer, denser bands.
-      const b = nonpareilBase(new Builder(p, pal), 2.5, { ripple: 2.2, plateau: 12, base: 8.6, width: 0.3, pull: 25 });
+      // `dir: 90` (2026-09-12, user: "you reversed the large combs without reversing the small ones! The small
+      // tongues should also be combed downwards"): the fine nonpareil comb's own direction, inside `nonpareilBase`,
+      // had stayed at the default -90 when only the wavyComb below was flipped — both need to run the same way.
+      const b = nonpareilBase(new Builder(p, pal), 2.5, { dir: 90, ripple: 2.2, plateau: 12, base: 8.6, width: 0.3, pull: 25 });
       const w = pal.wave; // the wave is the sheet's own (tongue-lean field, 2-D spectrum + sinusoid fit): period 108 mm and amplitude 17 mm on dp 75 (lean ±45°, path slope 1), 88 mm and 10 mm on dp 389 (lean ±36°)
       b.wavyComb(90, 10, w?.amp ?? 15, w?.len ?? 105, { alternate: false, ripple: 8, plateau: 12 }); // direction +90 (was -90, mirrored); ripple 8 (was 3) for longer, denser bands
       return b.drift().scene(); } },
@@ -1006,14 +1009,14 @@ export const RECIPES: Recipe[] = [
       // Square rhombuses (user): the zigzag legs run at 45° to the travel, so the wavelength is four times the amplitude
       // and the two rows, half a period apart into squares standing on a corner. Sets 48 mm apart (adjacent lines
       // 24 mm, amplitude 12, wavelength 48): 48 mm squares, between dp 144's 44 mm width and 54–57 mm row height.
-      // Drag before the comb (user, 2026-09-12, echoing nonpareilBase's own 2026-09-11 finding: a comb can only gather
-      // material into long shapes if there is already a coherent streak for it to find — a round drop dragged only by
-      // the comb itself stays a round drop, however it's sized): one pass elongates every stone-thrown drop 3× along
-      // the comb's own travel before the zigzag quilts it, so the quilted plumes come out as the scan's flowing leaf
-      // shapes instead of small round confetti at the same coverage.
-      b.stretch(-90, 3);
+      // NOT a pre-comb drag (user, 2026-09-12: "undo the drag. I meant that the comb should have a wider wake" — a
+      // 2026-09-12-earlier attempt read the "gather material into a coherent shape" finding from nonpareilBase's own
+      // drag as calling for the same mechanism here, but the user meant the WAKE's own reach, not an extra elongation
+      // pass before the comb ever touches the drops): widened the screening length `damp` (was PS/6, a third of the
+      // way to the neighbouring row's line; now PS/3, reaching further) so each tine's own pull draws more of its
+      // surrounding drop into the plume before the wake cuts off.
       const pw = pal.wave, PS = pw?.spacing ?? 88;   // the sheet's own plume lattice where it was measured (see the palette's `wave`)
-      b.wavyComb(-90, PS, pw?.amp ?? PS / 4, pw?.len ?? 190, { alternate: true, ripple: 0.35, kernel: "wake", L: 0.5, damp: PS / 6, shape: "triangle" });   // the wake screened at a third of the way to the neighbouring row's line (user): the tines cut along their zigzag paths and the eyes between them move whole, where the undamped pull swept the whole sheet into one drift   // stacked 60° rhombuses (user, 2026-09-10: back from the squares): legs at 30° to the travel, λ = 4·amp·√3, cells 44 wide × 76 tall on dp 144 (43.8 × 54–57 measured, the rows stacked); drawn up; ripple 0.35, less drag than the 0.5 of before (user)
+      b.wavyComb(-90, PS, pw?.amp ?? PS / 4, pw?.len ?? 190, { alternate: true, ripple: 0.35, kernel: "wake", L: 0.5, damp: PS / 3, shape: "triangle" });   // wider wake (see above); ripple 0.35, less drag than the 0.5 of before (user)   // stacked 60° rhombuses (user, 2026-09-10: back from the squares): legs at 30° to the travel, λ = 4·amp·√3, cells 44 wide × 76 tall on dp 144 (43.8 × 54–57 measured, the rows stacked); drawn up
       return b.drift().scene(); } },
 
   { name: "Serpentine", streaks: "h", group: "Combed", palette: "dp164", palettes: ["dp164", "serpentine19", "dp87"], terms: ["serpentine", "waved", "wave"], defaults: { ...D19, ...COMBED_LOOK, viscosity: 0.3 }, note: "Turkish, a one-row comb drawn down and back then across and back, halving, then a slightly wider comb drawn once down the sheet in wavy lines like a snake's track (Miura; dp 69, 164).",
