@@ -187,7 +187,8 @@ export function buildStatic(spec: LayerSpec): LayerStatic {
       s.bInh[i] = 0.3 + 0.08 * hash01(spec.seed, i * 2 + 1); // inhale : exhale ≈ 1 : 2
     }
   }
-  relaxOverlaps(s, spec);
+  // Overlap relaxation runs in bake(), after gap-filling: gap-filling's own area-conservation rescale (see bake)
+  // touches every radius in the layer and would otherwise put back-just-cleared same-colour neighbours in contact.
   return s;
 }
 
@@ -230,6 +231,46 @@ function relaxOverlaps(s: LayerStatic, spec: LayerSpec) {
       }
     }
     if (!moved) break;
+  }
+  // A same-colour trio (or denser knot) can leave a pair that position alone never clears: separating A from B
+  // reopens A from C, so the loop above settles into an oscillation rather than converging (measured on dp 370's
+  // light blue layer: ~1.8% of neighbour pairs stayed overlapping whether it ran 4 passes or 16, and by an
+  // unchanged amount — not a slow convergence, a stuck one). Left alone, that overlap is shallow enough to read as
+  // a waist between two circles rather than the flattened wall two colliding drops actually leave (peanut-shaped
+  // dots, user, 2026-09-12). Position can't fix a knot placement never had room for, so the last few percent of
+  // one's own radius settles it instead: shrink both drops just enough to clear, never past 70% of what they were,
+  // which for the handful of drops it touches is well inside a colour's own size spread and invisible in aggregate.
+  const r0 = s.r.slice();   // each drop's own radius before any shrink, as the floor's basis
+  for (let pass = 0; pass < 8; pass++) {
+    let shrunk = 0, sumOver = 0;
+    for (let y = 0; y < TILE; y++) {
+      for (let x = 0; x < TILE; x++) {
+        const i = at(x, y);
+        if (s.r[i] <= 0) continue;
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            if (dx === 0 && dy === 0) continue;
+            const j = at(x + dx, y + dy);
+            if (s.r[j] <= 0 || j <= i) continue;   // each pair once
+            const px = dx + s.jx[j] - s.jx[i], py = dy + s.jy[j] - s.jy[i];
+            const d = Math.hypot(px, py);
+            const want = s.r[i] + s.r[j];
+            if (d >= want) continue;
+            const over = want - d;
+            sumOver += over;
+            const floorI = 0.7 * r0[i], floorJ = 0.7 * r0[j];
+            const room = Math.max(0, s.r[i] - floorI) + Math.max(0, s.r[j] - floorJ);
+            if (room < 1e-6) continue;                     // both already at the floor: leave the residue
+            const cut = Math.min(over, room);
+            s.r[i] = Math.max(floorI, s.r[i] - cut * (Math.max(0, s.r[i] - floorI) / room));
+            s.r[j] = Math.max(floorJ, s.r[j] - cut * (Math.max(0, s.r[j] - floorJ) / room));
+            shrunk++;
+          }
+        }
+      }
+    }
+    if (sumOver < 1e-4) break;   // whatever remains is float noise at the d ≈ want boundary, not a real overlap
+    if (!shrunk) break;
   }
 }
 
@@ -309,6 +350,10 @@ export class LayerBank {
         const k = Math.sqrt(areaBefore / Math.max(areaAfter, 1e-9));
         for (let i = 0; i < TILE * TILE; i++) st.r[i] = Math.min(spec.rMax ?? 1.0, st.r[i] * k);
       }
+      // Run last, after any gap-fill: gap-fill's own per-cell discount and its area-conserving rescale (above)
+      // touch every radius in the layer and would otherwise put back-just-separated same-colour neighbours in
+      // contact (a rescale that grows the layer's radii overall can only ever push overlap back in, never out).
+      relaxOverlaps(st, spec);
       this.statics[slot] = st;
       this.keys[slot] = key;
     }
