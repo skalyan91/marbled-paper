@@ -70,7 +70,12 @@ const settings: Settings = {
   wear: 0.06,
   colourMatch: 1,
   hairMix: 1,
-  hairWidth: 0.25,
+  // 0.25 mm was the wicking-width measurement; raised 2026-09-12 (dp 17, shallow-ripple nonpareil tongues) because a
+  // fine comb's cusp is genuinely hairline in SCREEN space (a lot of sheet compresses into almost none there) but its
+  // Jacobian near the cusp singularity doesn't represent that correctly, so it was falling just outside the old
+  // threshold and rendering as a visible pale seam instead of being caught by this exact blending. Checked against
+  // Feather (whose quills must stay crisp, not mingled) up to hairWidth 5 with no visible change, so this is safe.
+  hairWidth: 0.8,
   transferAmp: 1.0,
   debug: DEBUG_MODES[0],
   savePng: () => savePng(),
@@ -668,7 +673,7 @@ function savePng() {
 }
 
 // ----------------------------------------------------------------- init
-const BASE_DEFAULTS = { viscosity: 0.35, gall: 1, density: 1, combScale: 1, combStrength: 1, curlStrength: 1, transferAmp: 1, paperAge: 0.35, bleed: 0.12, edgeDark: 0.12, grain: 0.7, tooth: 0.6, granulation: 0.6, wear: 0.06, colourMatch: 1, hairMix: 1, hairWidth: 0.25, drift: 1.2, breath: 0.12, stretchLimit: 60, gapFill: 0.7 };
+const BASE_DEFAULTS = { viscosity: 0.35, gall: 1, density: 1, combScale: 1, combStrength: 1, curlStrength: 1, transferAmp: 1, paperAge: 0.35, bleed: 0.12, edgeDark: 0.12, grain: 0.7, tooth: 0.6, granulation: 0.6, wear: 0.06, colourMatch: 1, hairMix: 1, hairWidth: 0.8, drift: 1.2, breath: 0.12, stretchLimit: 60, gapFill: 0.7 };
 function applyDefaults(name: string) {
   const r = RECIPES.find((x) => x.name === name);
   if (!r) return;

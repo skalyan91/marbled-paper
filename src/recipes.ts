@@ -45,6 +45,31 @@ export interface Palette {
   /** the last comb's wave as measured on the sheet (Double comb waved, Bouquet): the path's wavelength `len` and
    *  amplitude `amp` in mm and, for a two-row comb, the `spacing` of one row's tines; each recipe has its own fallback */
   wave?: { len: number; amp?: number; spacing?: number };
+  /** the plain Nonpareil's fine comb, measured per sheet (nonpareilBase falls back to its own defaults when absent):
+   *  `pitch` is the tine-to-tine repeat in mm (y-axis autocorrelation, 1-15 mm band, on the band's own travel axis —
+   *  dp 17: 5.03 mm, matching the 47-sheet corpus median of 5.07 almost exactly); `width` is the area-weighted local
+   *  colour-band width (p50, mm) from a denoised k-means segmentation + distance transform, comparable to the 0.69 mm
+   *  dp 82 baseline that the global `bold: 0.55` default was calibrated against (dp 17: 0.39 mm, genuinely finer —
+   *  see `widthStretch` in nonpareilBase, NOT `bold`: shrinking the stone-base drops to hit a width measurement
+   *  destroys the long-range coherence a comb needs to gather them into bands, which is a different, real bug this
+   *  field used to cause). `ripple` is the FINE comb's tongue-depth pull (spacings): a scan-only reading cannot give
+   *  this directly (it is a render parameter, not a physical length), and an attempted automated render-vs-scan
+   *  dive-share calibration proved unreliable on rendered (as opposed to scanned) images for reasons not run down —
+   *  dp 17's 1.5 is a true-scale visual match, not a fitted number. `kernel`/`L`/`damp` let the fine comb use the
+   *  wake profile (see CombOpts) instead of the default arc, for a sheet whose tongues are visibly asymmetric.
+   *  `pull` is the GET-GEL comb's own draw length in spacings (nonpareilBase defaults to 2.2, calibrated only for
+   *  the V's local cusp shape): per the catalogue's own account of the technique, a comb is drawn the length of the
+   *  trough, not a short local tongue, and bands never read as long and continuous at 2.2 regardless of how much the
+   *  stone-base drops were pre-stretched (user, 2026-09-12: "the bands still aren't long enough. How do they get the
+   *  ink to stretch so much?") — raising `pull` to ~15 (330 mm of draw on dp 17's 22 mm get-gel spacing) fixed it
+   *  directly, no new shader mechanism needed: `ripple` already reaches as far as it is told to. `dir` overrides the
+   *  fine comb's authored travel direction (-90 default points the tongues the wrong way once `orient` has flipped
+   *  the axis — dp 17 needs +90, found by direct comparison, not derived). `column` is the get-gel's own macro band
+   *  width in mm, measured by horizontal autocorrelation on the full-width scan (8-25 mm band; dp 17: 13.9 mm) —
+   *  nonpareilBase's `base` (hence its `coarse` scaling of the stone cell and get-gel spacing) is derived from it
+   *  instead of staying the flat default 4, because a sheet's get-gel spacing is exactly what a scan CAN measure
+   *  directly, unlike `pull`. */
+  band?: { pitch?: number; width?: number; ripple?: number; pull?: number; kernel?: "arc" | "wake"; L?: number; damp?: number; dir?: number; column?: number };
 }
 
 const P = (name: string, hex: string, o = 1, g = 0.5, m = 0): PigmentDef => ({ name, hex, opacity: o, grain: g, metallic: m });
@@ -804,23 +829,52 @@ const zebraBase = (b: Builder, round: number[], o: { spacing?: number; sizeMul?:
 /** Nonpareil base: a stone base, the get-gel (a wide comb drawn twice, halving), then a fine comb drawn once
  *  across it. `fine` is the fine comb's spacing: ~4 mm on dp 82; the double combs sit on a coarser nonpareil
  *  (arches 8–10 mm apart, dp 393 and 75), with spots to match. */
-const nonpareilBase = (b: Builder, fine = 4, o: { dir?: number; ripple?: number; bold?: number; plateau?: number; base?: number; beforeFine?: (b: Builder) => void; skipFine?: boolean } = {}) => {
-  // `fine` is the fine comb's pitch, `base` the pitch the stone base and the get-gel are scaled by. The scans carry two
-  // fine repeats, ~2.5 mm and ~8 mm (autocorrelation at true scale on dp 82, 289, 300, 21, 284); drawing the comb at
-  // the 8 mm one made the whole pattern too big (user: "I don't know why you suddenly made the Nonpareil combs so
-  // big — they looked the right size before"), so the tine pitch is the 4 mm it was and the V's depth comes from the
-  // pull instead (DEEP_TONGUE).
-  const coarse = (o.base ?? 4) / 4;
-  const dir = o.dir ?? -90;   // direction the fine comb moves; the get-gel is drawn at right angles to it
-  const bold = o.bold ?? 0.55;   // 0.55 (from 0.7): the band width goes as `bold` (the count as 1/bold², the fitter keeping the coverage); at 0.7 the bands inside the tongues measured (area-weighted local width at 0.077 mm/px) p50 0.85 / p90 2.5 mm on both renders against 0.69 / 2.4 on the dp 82 scan and 0.39 / 1.3 on dp 305   // user (2026-09-10): smaller drops, thinner stripes after the get-gel (the 2 of the previous round made columns 5–10 mm wide; the scans' stripes inside a tongue are 0.5–2 mm)   // fewer, larger drops at the same coverage: bands `bold` times wider after the get-gel (dp 82/305: one colour spans a column 5–10 mm wide over several tongues; at 1 every tongue cut three or four colours)
+const nonpareilBase = (b: Builder, fine?: number, o: { dir?: number; ripple?: number; bold?: number; plateau?: number; base?: number; width?: number; pull?: number; beforeFine?: (b: Builder) => void; skipFine?: boolean } = {}) => {
+  // `fine` is the fine comb's pitch, `base` the pitch the stone base and the get-gel are scaled by. Measured directly
+  // (an angle sweep for the strongest across-travel periodicity, 1.5-4 mm band, validated against true-scale crops)
+  // over the 47 sheets built on this recipe, the tine pitch clusters tightly at 4.95-6.53 mm, median 5.07 — not the
+  // 8 mm a coarser autocorrelation once suggested (too big for the eye), nor the 4 mm the comb had been drawn at.
+  // The V's depth stays in the pull (DEEP_TONGUE), not the pitch.
+  // A caller that passes its own `fine` (Icarus, Cathedral, Double comb, Bouquet, French curl on Nonpareil — each a
+  // distinct authored pattern) keeps it; the plain Nonpareil recipe passes none, so its sheets fall through to their
+  // own measured `pal.band.pitch` when the palette carries one, else the 5 mm corpus median (see `Palette.band`).
+  const finePitch = fine ?? b.pal.band?.pitch ?? 5;
+  // base sets the get-gel's own spacing (22·sqrt(coarse) mm, halved by the two passes to an effective column width of
+  // ~11·sqrt(coarse) = 5.5·sqrt(base) mm); a sheet with its own measured `pal.band.column` (dp 17: 13.9 mm) solves
+  // that back for `base` instead of the flat default 4 (2026-09-12, user: "the bands are still too thin").
+  const base = o.base ?? (b.pal.band?.column !== undefined ? Math.pow(b.pal.band.column / 5.5, 2) : 4);
+  const coarse = base / 4;
+  const dir = o.dir ?? b.pal.band?.dir ?? -90;   // direction the fine comb moves; the get-gel is drawn at right angles to it
+  // 0.55 (from 0.7) is the corpus default, calibrated so the render's area-weighted local band width (p50) matches
+  // dp 82's scan at 0.69 mm. `bold` sets the STONE BASE's own drop size/density (coherence: how big and how few the
+  // underlying regions are, which is what lets a comb gather them into bands that run the sheet's full length) — it
+  // is an authored, per-RECIPE knob (Bouquet 2, Double comb waved 3), not something a per-sheet measurement should
+  // touch (2026-09-12, dp 17, user: "still doesn't have the long, slanted bands"): shrinking `bold` to hit a measured
+  // width (as this used to do, width/0.69 folded into bold) shrinks the drops too, and even an isolated, undisturbed
+  // comb pass can't gather fine speckle into a clean long band — there is no bulk of one colour for it to find. A
+  // sheet's measured `pal.band.width` now drives `widthStretch` below instead: extra elongation on ALREADY-coherent
+  // drops, which both thins the visible stripe (area-preserving: width ~ 1/sqrt(stretch)) and lengthens the streak
+  // the get-gel then has to work with — the same knob fixes both the width measurement and the macro-scale coherence
+  // the width-via-bold approach was quietly destroying, because they were always the same underlying quantity.
+  const bold = o.bold ?? 0.55;   // the band width goes as `bold` (the count as 1/bold², the fitter keeping the coverage); at 0.7 the bands inside the tongues measured (area-weighted local width at 0.077 mm/px) p50 0.85 / p90 2.5 mm on both renders against 0.69 / 2.4 on the dp 82 scan and 0.39 / 1.3 on dp 305   // user (2026-09-10): smaller drops, thinner stripes after the get-gel (the 2 of the previous round made columns 5–10 mm wide; the scans' stripes inside a tongue are 0.5–2 mm)   // fewer, larger drops at the same coverage: bands `bold` times wider after the get-gel (dp 82/305: one colour spans a column 5–10 mm wide over several tongues; at 1 every tongue cut three or four colours)
   // The drops are thrown larger and sparser than the sheet's own fragments, but only by a third now, not by the
   // fourteenth they were: the drag below is what draws them into bands 5–10 mm wide, where before the band width had
   // to come from the drop itself. Every sheet on this base is refitted for coverage under these numbers.
   b.turkish({ cell: 16 * Math.sqrt(coarse), sizeMul: 3 * Math.sqrt(coarse) * bold, densityMul: 0.3 / (bold * bold), gallDots: false, shape: 2.5 });
   // The bath is dragged once before any comb touches it (user, 2026-09-11): the rake is drawn the length of the bath
   // and every drop is pulled into a streak along its travel, so what the get-gel then cuts is a field of bands, not a
-  // field of blobs. DRAG is the elongation that one pass gives.
-  b.stretch(dir + 90, DRAG);
+  // field of blobs. DRAG is the elongation that one pass gives; `widthStretch` (see above) multiplies it further when
+  // a sheet's measured band width is finer than the 0.69 mm baseline (dp 17: 0.39 mm -> ×3.1).
+  // `stretch` does not add `this.axis` the way `comb`/`comb2` do (spotted 2026-09-11 while calibrating dp 17's tongue
+  // depth, though dp 17 itself carries axis 0 so it was never visibly wrong): on a sheet whose `orient` DOES trigger a
+  // 90° flip, the drag would stay in the recipe's unrotated frame while the combs that follow it rotate, cutting a
+  // field still streaked the old way. Kept consistent defensively.
+  // `o.width` lets a RECIPE (not just a measured sheet) reach the same mechanism directly — Double comb waved and
+  // Bouquet (2026-09-12) need it too, and neither carries per-sheet `pal.band` data (they're one authored pattern
+  // each, tuned against their own primary scan, the same way `base`/`ripple` already are).
+  const widthTarget = o.width ?? b.pal.band?.width;
+  const widthStretch = o.bold === undefined && widthTarget !== undefined ? Math.pow(0.69 / widthTarget, 2) : 1;
+  b.stretch(dir + 90 + b.axis, DRAG * widthStretch);
   // get-gel: a wide comb drawn twice, halving, with the wake kernel and a 5 mm core: each band moves almost rigidly,
   // drawn long yet still wide. The arc profile here either shears the bands to threads (hard pull) or shows its own
   // arches (gentle pull).
@@ -833,11 +887,19 @@ const nonpareilBase = (b: Builder, fine = 4, o: { dir?: number; ripple?: number;
   // and dp 82 0.08 against 0.24, from 0.09 and 0.12 at a third. (A comb pulled the length of the bath wants the
   // opposite — a Feather's lines are long and nearly parallel, and at a sixteenth its quill columns broke into notched
   // bands — so this screening is the nonpareil base's own and not the default.)
-  b.comb2(dir + 90, 22 * Math.sqrt(coarse), { ripple: 2.2, L: 0.35, damp: 22 * Math.sqrt(coarse) / 8 });   // sharp tines: each drop the tine crosses is all but cut, the bands between move whole (dp 82; a 5 mm core dragged whole bands and left no cuts)
+  // Not `comb2`: its second (halving) pass is deliberately weaker (strength ×0.85, comb2's own default, shared by
+  // every other recipe that calls it and left alone there) — fine for those, but here it broke the get-gel's own
+  // rhythm into bundled pairs (a strong tine right next to its weaker halving partner, then a wider gap to the next
+  // pair) instead of an even repeat (user, 2026-09-12: "a couple of bundles of pairlines punctuated by a wider band
+  // ... I was expecting something more even"), confirmed by a side-by-side render with both passes equal. The two
+  // get-gel passes are drawn here explicitly, at equal strength.
+  const getgel = { kernel: "wake" as const, L: 0.35, damp: 22 * Math.sqrt(coarse) / 8, ripple: o.pull ?? b.pal.band?.pull ?? 2.2 };   // sharp tines: each drop the tine crosses is all but cut, the bands between move whole (dp 82; a 5 mm core dragged whole bands and left no cuts); `pull` (default 2.2) is how far this comb was actually drawn, in spacings — long for a sheet whose bands run the length of the sheet; `o.pull` lets a recipe (not just a measured sheet) set its own draw length directly
+  b.comb(dir + 90, 22 * Math.sqrt(coarse), getgel);
+  b.comb(dir + 270, 22 * Math.sqrt(coarse), { ...getgel, offset: 11 * Math.sqrt(coarse) });
   b.jog(dir + 90);   // the bands jog sideways irregularly before the fine comb; the scallops stay regular (dp 284)
   o.beforeFine?.(b);  // a pass on the get-gel bands before the fine comb cuts them
   if (o.skipFine) return b;  // the caller draws its own last comb (Double comb waved: along a wave)
-  b.comb(dir, fine, { ripple: o.ripple ?? DEEP_TONGUE, plateau: o.plateau }); // fine comb drawn once across the bands: scallops along every band edge, ~4.5 mm apart on dp 82 and two to three times as deep as they are wide
+  b.comb(dir, finePitch, { ripple: o.ripple ?? b.pal.band?.ripple ?? DEEP_TONGUE, plateau: o.plateau, kernel: b.pal.band?.kernel, L: b.pal.band?.L, damp: b.pal.band?.damp }); // fine comb drawn once across the bands: scallops along every band edge, ~4.5 mm apart on dp 82 and two to three times as deep as they are wide (arc profile by default; a sheet whose tongues are asymmetric wake crescents passes its own kernel/L/damp)
   return b;
 };
 
@@ -865,9 +927,9 @@ export const RECIPES: Recipe[] = [
       for (const c of round) b.sprinkleStats(c, b.statsOf(c), { anim: 0.6 });
       return b.drift().scene(); } },
   { name: "Icarus", streaks: "v", group: "Combed", palette: "g216", palettes: ["g216", "g217", "g219", "g220", "g221", "g222"], terms: ["icarus", "whirl"], defaults: { ...D19, ...COMBED_LOOK, viscosity: 0.3 }, note: "Fine nonpareil, then a deep comb drawn down the sheet along a slow arc: nested wing-like crescents (dp 216).",
-    build: (p, pal) => { const b = nonpareilBase(new Builder(p, pal), 4, { ripple: 2.2, base: 4 }); /* the shallower tongues the plain nonpareil was drawn with: the crescent comb below draws them out again, and on dp 216 the crescents are one to two spacings deep, not four */ b.wavyComb(-90, 14, 22, 260, { alternate: false, ripple: 2.5, L: 1, kernel: "wake" }); /* one deep wide-kernel comb drawn down a slow arc: nested crescents ~14 mm apart, all bowing one way (dp 216) */ return b.drift().scene(); } },
+    build: (p, pal) => { const b = nonpareilBase(new Builder(p, pal), 5, { ripple: 2.2, base: 5 }); /* the shallower tongues the plain nonpareil was drawn with: the crescent comb below draws them out again, and on dp 216 the crescents are one to two spacings deep, not four */ b.wavyComb(-90, 14, 22, 260, { alternate: false, ripple: 2.5, L: 1, kernel: "wake" }); /* one deep wide-kernel comb drawn down a slow arc: nested crescents ~14 mm apart, all bowing one way (dp 216) */ return b.drift().scene(); } },
   { name: "Cathedral", streaks: "v", group: "Combed", palette: "g218", palettes: ["g218", "g224", "g234", "g242", "g243", "g244"], terms: ["cathedral"], defaults: { ...D19, ...COMBED_LOOK, viscosity: 0.3 }, note: "Nonpareil, then one wide comb with strong pull drawn up the sheet: tall pointed arches (dp 218).",
-    build: (p, pal) => { const b = nonpareilBase(new Builder(p, pal), 4, { ripple: 2.2, base: 4 }); /* as Icarus: the 55 mm comb below draws the tongues out again (dp 218) */ b.comb(-90, 55, { ripple: 3.5, L: 1.5, kernel: "wake" }); return b.drift().scene(); } },
+    build: (p, pal) => { const b = nonpareilBase(new Builder(p, pal), 5, { ripple: 2.2, base: 5 }); /* as Icarus: the 55 mm comb below draws the tongues out again (dp 218) */ b.comb(-90, 55, { ripple: 3.5, L: 1.5, kernel: "wake" }); return b.drift().scene(); } },
   { name: "Wide comb (Arch)", streaks: "v", group: "Combed", palette: "dp274", palettes: ["dp274", "nonpareil19"], terms: ["wide comb", "arch"], defaults: { ...D19, ...COMBED_LOOK, viscosity: 0.3 }, note: "Narrow comb twice horizontally, then a wider comb vertically once.",
     build: (p, pal) => { const b = new Builder(p, pal); turkishBase(b, 2.2); /* the line pitch inside an arch is set by the drop count, not the drop size (the fitter sets the size): dp 191/432 carry 15–20 lines per 25 mm arch, which needs ~0.5 of the measured fragment density, not the 0.07 of a get-gel sheet */ b.comb2(0, 8, { ripple: 2.5, L: 1.5, kernel: "wake" }); /* wake kernel: the 8 mm passes draw the drops into smooth hairlines (dp 191 at native scale: no scallops inside the arches); the arc profile's elliptical heads showed as 8 mm scallop rows */ b.comb(-90, 22, { ripple: 2.0 }); /* arches two spacings deep: on the scans the bands swing through 66° of orientation on dp 191 and 42° on dp 274 (coherence-weighted spread of the structure tensor at true scale), where a ripple of 1.2 rendered 46°/44° */ return b.drift().scene(); } },
 
@@ -887,14 +949,25 @@ export const RECIPES: Recipe[] = [
          reversing every half wave. Tongues that lean with the wave were cut by the comb that was drawn along it: the last comb is
          the 10 mm one, drawn down the sheet along a wave of ±15 mm over ~105 mm and pulled hard, over a nonpareil of a finer comb
          (Wolfe: a nonpareil, then a comb with wider teeth drawn once more in a wavy line). dp 471 (Guyot) is finer, ~5 mm tongues. */
-      const b = nonpareilBase(new Builder(p, pal), 2.5, { bold: 3, ripple: 2.2, plateau: 12, base: 2.5 }); // a fine nonpareil of 2.5 mm: four subdivisions inside every 10 mm tongue (dp 75), on get-gel bands 3–5 mm
+      // 2026-09-12 (user: "combing direction reversed... thinner, longer and denser bands"): `base` was 2.5 (get-gel
+      // column ~8.7 mm effective) — dp 75's own column autocorrelation peaks at 16.14 mm, base 8.6 matches it and
+      // reads far denser/richer, without changing the fine 2.5 mm nonpareil underneath. `bold` (an authored flat
+      // multiplier) is dropped in favour of the sheet's own measured width (0.3 mm, on the same 0.69 mm dp 82
+      // baseline `nonpareilBase`'s `widthStretch` uses); `pull` 25 is the get-gel's own draw length, not the 2.2
+      // local-cusp default. The wavyComb direction below was mirrored from the scan (found by direct render
+      // comparison, not derivable from the axis algebra) and its ripple deepened for the longer, denser bands.
+      const b = nonpareilBase(new Builder(p, pal), 2.5, { ripple: 2.2, plateau: 12, base: 8.6, width: 0.3, pull: 25 });
       const w = pal.wave; // the wave is the sheet's own (tongue-lean field, 2-D spectrum + sinusoid fit): period 108 mm and amplitude 17 mm on dp 75 (lean ±45°, path slope 1), 88 mm and 10 mm on dp 389 (lean ±36°)
-      b.wavyComb(-90, 10, w?.amp ?? 15, w?.len ?? 105, { alternate: false, ripple: 3, plateau: 12 });
+      b.wavyComb(90, 10, w?.amp ?? 15, w?.len ?? 105, { alternate: false, ripple: 8, plateau: 12 }); // direction +90 (was -90, mirrored); ripple 8 (was 3) for longer, denser bands
       return b.drift().scene(); } },
 
   { name: "Bouquet", streaks: "v", group: "Combed", palette: "dp172", palettes: ["dp172"], terms: ["bouquet", "fern"], defaults: { ...D19, ...COMBED_LOOK, viscosity: 0.3 }, note: "Nonpareil base, then a comb with two rows of teeth drawn down the sheet in a loose wave: each nonpareil column fans out into a small bouquet (Miura; dp 172).",
     build: (p, pal) => {
-      const b = nonpareilBase(new Builder(p, pal), 4, { ripple: 3, bold: 2, plateau: 12, base: 4 }); // get-gel across, 4 mm fine comb down, pulled hard so the small tongues show inside the fans; bands 3–5 mm wide on dp 172, bolder than dp 82: columns of tongues (dp 172: 5.7–6.3 mm tongue period inside the cups, spread 1.43×)
+      // 2026-09-12 (user: "longer, thinner and denser bands"): `base` 10 (was 4, too narrow a get-gel column, leaving
+      // the fans thin and pale). `bold` dropped in favour of the sheet's own measured width (0.4 mm, `widthStretch`'s
+      // 0.69 mm baseline) — base alone (tried at 4/7/10) stayed muddy and under-banded; base+width together read far
+      // denser and more saturated. `pull` 15 is the get-gel's own draw length.
+      const b = nonpareilBase(new Builder(p, pal), 4, { ripple: 3, plateau: 12, base: 10, width: 0.4, pull: 15 }); // get-gel across, 4 mm fine comb down, pulled hard so the small tongues show inside the fans; bands 3–5 mm wide on dp 172, bolder than dp 82: columns of tongues (dp 172: 5.7–6.3 mm tongue period inside the cups, spread 1.43×)
       // Two interleaved tine sets 74 mm apart (adjacent lines 37 mm), in opposite phase, with the wave's amplitude half the
       // separation of adjacent lines (18.5 mm): neighbouring lines touch once a wavelength, so the sheet is quilted into
       // closed cells, each nonpareil column fanning out into a bouquet and pinching to a stem; the cells of adjacent
@@ -904,12 +977,12 @@ export const RECIPES: Recipe[] = [
       // columns staggered half a wavelength, so a fan runs head to stem in λ/2. dp 172: S 68, λ 118 (fans every 60 mm per column,
       // staggered); dp 174: S 56, λ 62; dp 173 (at its catalogued 13 cm): S 19, λ 24; dp 495 (a Fern): lines 17 apart, fronds 54.
       const w = pal.wave, S = w?.spacing ?? 74;
-      b.wavyComb(90, S, w?.amp ?? S / 4, w?.len ?? 74, { alternate: true, ripple: 0.9, kernel: "wake", L: 0.5, damp: S / 6 });   // pulled twice as far as the screened comb was first given (user, 2026-09-11: more drag, as it had before the wake was screened)   // the wake screened at a third of the way to the neighbouring line (the rows interleave, so that line is S/2 away): each tine draws its own column out into a fan and the paint between the fans keeps the nonpareil it was given (user: the drag "limited to just around the comb", the areas between the waves untouched)   // drawn UP the sheet (user, 2026-09-10: at −90 the fans opened the wrong way once the sharp wake showed the drag)   // combed sharply (user): the tines cut the columns along their wavy paths, the fans between move whole // amplitude S/4: neighbouring lines touch once a wavelength // plateau: the tongues ride into the fan whole; the stretch sits in the stems (dp 172)
+      b.wavyComb(90, S, w?.amp ?? S / 4, w?.len ?? 74, { alternate: true, ripple: 1.5, kernel: "wake", L: 0.5, damp: S / 6 });   // ripple 1.5 (was 0.9, 2026-09-12): longer fan tails, matching the scan   // pulled twice as far as the screened comb was first given (user, 2026-09-11: more drag, as it had before the wake was screened)   // the wake screened at a third of the way to the neighbouring line (the rows interleave, so that line is S/2 away): each tine draws its own column out into a fan and the paint between the fans keeps the nonpareil it was given (user: the drag "limited to just around the comb", the areas between the waves untouched)   // drawn UP the sheet (user, 2026-09-10: at −90 the fans opened the wrong way once the sharp wake showed the drag)   // combed sharply (user): the tines cut the columns along their wavy paths, the fans between move whole // amplitude S/4: neighbouring lines touch once a wavelength // plateau: the tongues ride into the fan whole; the stretch sits in the stems (dp 172)
       return b.drift().scene(); } },
 
   { name: "Peacock", streaks: "v", group: "Combed", palette: "peacock19", palettes: ["peacock19"], terms: ["peacock", "augen"], defaults: { ...D19, ...COMBED_LOOK, viscosity: 0.3 }, note: "Turkish, then a comb with two rows of teeth drawn down the sheet in a zigzag: the colours are quilted into tall plumes, each with the stone spots inside (dp 144).",
     build: (p, pal) => {
-      const b = new Builder(p, pal); turkishBase(b, 1.6, { shape: 2.0, paperCells: false });   // 1.6 (user: the coloured dots a bit bigger than at 1.2; 2.4 was too big) // the spots survive as small 1.5–4 mm blobs inside the eyes, ~2 per cm² of cream and ~1 per cm² of each other colour (dp 144 at 0.077 mm/px: count-median 1.4–2.5 mm, area-median 3.7–5 mm): thrown small and many (a stretch of 1.2, 1.7× the density), the fitter keeps the coverage; shape 2: no giants in the tail, which merged into 6–9 mm blobs
+      const b = new Builder(p, pal); turkishBase(b, 2.6, { shape: 2.0, paperCells: false });   // 2.6 (from 1.6; user, 2026-09-12: "larger dots... to match the larger cells" — a 60 mm true-scale crop of dp 144 measures blobs 5-8 mm across, bigger than the 3.7-5 mm this was tuned to) // shape 2: no giants in the tail, which merged into 6–9 mm blobs
       // The cream is thrown small and many (user: the white dots much smaller). dp 144 at 0.077 mm/px: 2–3.4 fragments per cm²
       // (count-median 1 mm equivalent diameter, area-median 3–4 mm) of streaks 0.55–0.65 mm wide (p90 1.3–1.7 mm). At 6× the
       // palette's count the fitter's size for the coverage is ~1.2 mm, which the combs drew into ~0.5 × 3 mm streaks, thinner
@@ -933,6 +1006,12 @@ export const RECIPES: Recipe[] = [
       // Square rhombuses (user): the zigzag legs run at 45° to the travel, so the wavelength is four times the amplitude
       // and the two rows, half a period apart into squares standing on a corner. Sets 48 mm apart (adjacent lines
       // 24 mm, amplitude 12, wavelength 48): 48 mm squares, between dp 144's 44 mm width and 54–57 mm row height.
+      // Drag before the comb (user, 2026-09-12, echoing nonpareilBase's own 2026-09-11 finding: a comb can only gather
+      // material into long shapes if there is already a coherent streak for it to find — a round drop dragged only by
+      // the comb itself stays a round drop, however it's sized): one pass elongates every stone-thrown drop 3× along
+      // the comb's own travel before the zigzag quilts it, so the quilted plumes come out as the scan's flowing leaf
+      // shapes instead of small round confetti at the same coverage.
+      b.stretch(-90, 3);
       const pw = pal.wave, PS = pw?.spacing ?? 88;   // the sheet's own plume lattice where it was measured (see the palette's `wave`)
       b.wavyComb(-90, PS, pw?.amp ?? PS / 4, pw?.len ?? 190, { alternate: true, ripple: 0.35, kernel: "wake", L: 0.5, damp: PS / 6, shape: "triangle" });   // the wake screened at a third of the way to the neighbouring row's line (user): the tines cut along their zigzag paths and the eyes between them move whole, where the undamped pull swept the whole sheet into one drift   // stacked 60° rhombuses (user, 2026-09-10: back from the squares): legs at 30° to the travel, λ = 4·amp·√3, cells 44 wide × 76 tall on dp 144 (43.8 × 54–57 measured, the rows stacked); drawn up; ripple 0.35, less drag than the 0.5 of before (user)
       return b.drift().scene(); } },

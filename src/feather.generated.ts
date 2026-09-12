@@ -51,7 +51,7 @@ export const FEATHER: Record<string, Record<string, number>> = {
   dp322: { "green": 1.091, "umber": 1.395, "black": 1.31, "brown": 1.322, "ochre": 0.904 },
   dp326: { "umber": 1.242, "black": 1.197, "umber 2": 0.995, "red": 1.069 },
   dp352: { "red": 0.821, "olive": 1.021, "yellow": 0.744, "black": 0.641, "blue": 0.608, "olive 2": 0.783 },
-  turkish17: { "red": 0.976, "maroon": 0.989, "medium blue": 0.854, "yellow": 0.616, "dark green": 0.868, "dark blue": 0.925, "grey": 0.845, "light blue": 0.74 },
+  turkish17: { "red": 0.976, "maroon": 0.989, "medium blue": 0.854, "yellow": 2.2, "dark green": 2.0, "dark blue": 0.925, "grey": 0.845, "light blue": 0.74 },   // yellow/dark green hand-raised (2026-09-12, user: dp 370's yellow/green have feathered/ragged edges) — dp 370's own scan is only 429 px wide (~2.9 px/mm), below this measurement's 4 px/mm floor for resolving the 0.3 mm smoothing scale, so the automated FEATHER numbers for this sheet are unreliable rather than reflecting genuine smoothness
   dp393: { "red": 0.947, "maroon": 1.227, "tan": 1.321, "ochre": 1.027, "blue": 0.98, "maroon 2": 1.006, "green": 0.882, "white": 0.949 },
   serpentine19: { "red": 1.192, "red 2": 1.023, "brown": 1.036, "orange": 0.775, "orange 2": 1.173, "green": 0.918, "yellow": 0.934, "blue": 0.979 },
   guyot20: { "yellow": 1.373, "orange": 0.925, "yellow 2": 0.723, "green": 0.902 },
