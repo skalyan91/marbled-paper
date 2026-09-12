@@ -41,6 +41,19 @@ export interface LayerSpec {
   isSpot?: boolean;
   shape?: number; // Weibull shape of the diameter above the floor; when set, replaces the log-normal
   floor?: number; // radius floor in cells (the 1.2 mm resolution floor of the measurements)
+  // A single-colour layer's own share of a shared, sheet-wide column favouritism: a low-frequency sinusoid in the
+  // sheet's own bath mm (not this layer's own randomly rotated grid, so every colour's layers read the same
+  // columns), one period per `period` mm along direction `dirDeg`, this colour's own phase offset (so different
+  // colours favour different columns), lifted to `gamma` before it multiplies the drawn radius. Independent
+  // per-colour phases mean any one column can land any one colour strongly favoured (its radius multiplied up
+  // toward the crest) while the others are all near a trough at once — most colours thin to near nothing there
+  // rather than all sharing the column evenly, which is what turns into a nonpareil's "mostly a couple of thick
+  // colours, with occasional thin bands of the others" once combed, rather than one uniform fine mix throughout
+  // (user, 2026-09-12: dp 17's bands "mostly thick reds and blues with occasional thin cream and green"). `comp`
+  // restores the radius's own mean (a `gamma`-lift of a 0..1 sinusoid pulls the mean below 0.5, thinning the
+  // colour's average coverage below its fitted target unless compensated) — the caller passes 1/sqrt(mean of
+  // favour^(2·gamma)) it measured for its own `gamma`, since that mean has no simple closed form off half-integers.
+  colBias?: { dirDeg: number; period: number; phase: number; gamma: number; comp: number };
 }
 
 interface LayerStatic {
@@ -160,6 +173,13 @@ export function buildStatic(spec: LayerSpec): LayerStatic {
     perms.push(p);
     shifts.push(Array.from({ length: k }, () => Math.floor(rnd() * k)));
   }
+  // Column favouritism reads this layer's own grid cell in the sheet's shared bath mm (the same frame every
+  // colour's own, independently placed and rotated, layer converts into), so a "column" lines up across colours
+  // even though each one's own lattice sits at its own random offset and rotation (see LayerSpec.colBias).
+  const cb = spec.colBias;
+  const ocx = spec.origin?.[0] ?? 0, ocy = spec.origin?.[1] ?? 0;
+  const rotC = Math.cos(spec.rot ?? 0), rotS = Math.sin(spec.rot ?? 0);
+  const biasDirC = cb ? Math.cos((cb.dirDeg * Math.PI) / 180) : 0, biasDirS = cb ? Math.sin((cb.dirDeg * Math.PI) / 180) : 0;
   for (let y = 0; y < TILE; y++) {
     for (let x = 0; x < TILE; x++) {
       const i = y * TILE + x;
@@ -173,6 +193,13 @@ export function buildStatic(spec: LayerSpec): LayerStatic {
         const scale = Math.max(spec.radius - fl, 0.01) / Math.pow(Math.LN2, 1 / spec.shape);
         rr = fl + scale * Math.pow(-Math.log(Math.max(rnd(), 1e-9)), 1 / spec.shape);
       } else rr = spec.radius * Math.exp(spec.radiusSigma * gauss(rnd));
+      if (cb) {
+        const gx = x + 0.5 + s.jx[i], gy = y + 0.5 + s.jy[i];
+        const mx = ocx + (rotC * gx - rotS * gy) * spec.cellMm, my = ocy + (rotS * gx + rotC * gy) * spec.cellMm;
+        const proj = mx * biasDirC + my * biasDirS;
+        const favour = 0.5 + 0.5 * Math.sin((2 * Math.PI * proj) / cb.period + cb.phase);
+        rr *= Math.pow(favour, cb.gamma) * cb.comp;
+      }
       s.r[i] = present ? Math.min(spec.rMax ?? 1.0, rr) : 0;
       const bx = Math.floor(x / k), by = Math.floor(y / k);
       const bi = by * blocks + bx;

@@ -356,6 +356,15 @@ const THROWS = 4;
  *  neighbouring path is half a spacing away and the recipe passes spacing/6. */
 const CONFINE = 1 / 3;
 
+/** 1/sqrt(mean of (0.5+0.5·sinθ)^(2·gamma)) — see LayerSpec.colBias's `comp`: the radius multiplier needed to keep a
+ *  column-clumped colour's average area equal to what it would have been unclumped, for a given contrast `gamma`. */
+function colBiasComp(gamma: number): number {
+  const N = 720;
+  let sum = 0;
+  for (let i = 0; i < N; i++) { const t = (2 * Math.PI * i) / N; sum += Math.pow(0.5 + 0.5 * Math.sin(t), 2 * gamma); }
+  return 1 / Math.sqrt(sum / N);
+}
+
 export class Builder {
   ops: Op[] = [];
   layers: LayerSpec[] = [];
@@ -392,7 +401,7 @@ export class Builder {
   private rnd(i: number) { return hash01(this.p.seed + 1, this.n * 131 + i + 17); }
 
   /** Sprinkle a layer. cellMm and radius (cells) are nominal; density/gall scale them. */
-  sprinkle(colours: number[], o: { cell: number; r?: number; sigma?: number; jitter?: number; fill?: number; style?: number; styleParam?: number; wobble?: number; gallMul?: number; anim?: number; ring?: number; small?: boolean; gapFill?: number; shape?: number; floorMm?: number; cross?: number }) {
+  sprinkle(colours: number[], o: { cell: number; r?: number; sigma?: number; jitter?: number; fill?: number; style?: number; styleParam?: number; wobble?: number; gallMul?: number; anim?: number; ring?: number; small?: boolean; gapFill?: number; shape?: number; floorMm?: number; cross?: number; colBias?: { dirDeg: number; period: number; phase: number; gamma: number; comp: number } }) {
     const slot = this.layers.length;
     if (slot >= 8) return this;
     const p = this.p;
@@ -427,6 +436,7 @@ export class Builder {
       rMax: o.small ? 0.8 : 1.0,
       shape: o.shape,
       floor: o.floorMm !== undefined ? o.floorMm / 2 / cell : undefined,
+      colBias: o.colBias,
     };
     const ang = this.rnd(1) * Math.PI * 2;
     spec.origin = [(this.rnd(2) - 0.5) * cell, (this.rnd(3) - 0.5) * cell];
@@ -454,13 +464,13 @@ export class Builder {
   }
 
   /** Sprinkle by measured statistics: spots per cm², median diameter (mm), log-normal spread. */
-  sprinkleStats(colour: number, st: { perCm2: number; d50: number; sig: number; wk?: number }, o: { style?: number; styleParam?: number; anim?: number; densityMul?: number; sizeMul?: number; wobble?: number; jitter?: number; minDens?: number } = {}) {
+  sprinkleStats(colour: number, st: { perCm2: number; d50: number; sig: number; wk?: number }, o: { style?: number; styleParam?: number; anim?: number; densityMul?: number; sizeMul?: number; wobble?: number; jitter?: number; minDens?: number; colBias?: { dirDeg: number; period: number; phase: number; gamma: number; comp: number } } = {}) {
     const dens = st.perCm2 * (o.densityMul ?? 1);
     const cellMm = 10 / Math.sqrt(Math.max(o.minDens ?? 0.05, dens));   // the 0.05 floor is part of every fitted sheet's regime; Placard's few huge drops pass minDens 0.006
     const r = (st.d50 * 1.35 * (o.sizeMul ?? 1)) / 2 / cellMm; // ×1.35: scan components are fragmented by later colours; clamped ≤ 0.8 cell in the bake
     const pk = this.pal.pack ?? {};
     const rr = r / (0.55 + 0.45 * this.p.gall);
-    return this.sprinkle([colour], { cell: cellMm * this.p.density, r: rr, sigma: Math.min(st.sig, pk.sigma ?? 9), fill: 1, jitter: o.jitter ?? pk.jitter ?? 0.46, style: o.style, styleParam: o.styleParam, wobble: o.wobble, anim: o.anim ?? 1, small: rr <= 0.3, shape: st.wk ?? 1.1, floorMm: 1.2 });
+    return this.sprinkle([colour], { cell: cellMm * this.p.density, r: rr, sigma: Math.min(st.sig, pk.sigma ?? 9), fill: 1, jitter: o.jitter ?? pk.jitter ?? 0.46, style: o.style, styleParam: o.styleParam, wobble: o.wobble, anim: o.anim ?? 1, small: rr <= 0.3, shape: st.wk ?? 1.1, floorMm: 1.2, colBias: o.colBias });
   }
 
   /** Straight comb: tines spaced `spacing` mm along the perpendicular, moving in `dirDeg`.
@@ -604,7 +614,7 @@ export class Builder {
   /** Turkish / stone base, laid as on the 17th–18th-c. sheets: the background colour thrown
    *  first and generously (it keeps 25–45 % of the area), then the spot colours in laying order
    *  with their measured size distributions, then gall water as small clear spots. */
-  turkish(o: { spots?: number; cell?: number; bgCell?: number; bgR?: number; bgFill?: number; lastStyle?: number; lastParam?: number; ringed?: boolean; fill?: number; gallDots?: boolean; skipBackground?: boolean; sizeMul?: number; densityMul?: number; gold?: boolean; ground?: number; exclude?: number[]; shape?: number; paperCells?: boolean } = {}) {
+  turkish(o: { spots?: number; cell?: number; bgCell?: number; bgR?: number; bgFill?: number; lastStyle?: number; lastParam?: number; ringed?: boolean; fill?: number; gallDots?: boolean; skipBackground?: boolean; sizeMul?: number; densityMul?: number; gold?: boolean; ground?: number; exclude?: number[]; shape?: number; paperCells?: boolean; colClump?: { dirDeg: number; period: number; gamma?: number } } = {}) {
     const pal = this.pal;
     const cell = o.cell ?? 12;
     const groundIdx = o.ground ?? pal.background;
@@ -645,7 +655,13 @@ export class Builder {
       let style = (o.ringed ? STYLE.RINGED : 0);
       if (last && o.lastStyle) style |= o.lastStyle;
       const st = { perCm2: pg.perCm2 ?? 1.2, d50: pg.d50 ?? 2.2, sig: pg.sig ?? 0.6, wk: o.shape ?? pg.wk };
-      this.sprinkleStats(c, st, { style, styleParam: last ? o.lastParam : undefined, sizeMul: o.sizeMul, densityMul: o.densityMul });
+      // Every spot colour reads the same shared column field (see LayerSpec.colBias) but at its own phase, spread
+      // evenly round the circle by its own index among the spots rather than left to a hash's luck: with as few as
+      // six or seven spot colours a hashed phase can leave two of them nearly in step (both favouring the same
+      // columns, a third never favoured anywhere), which golden-angle spacing avoids.
+      const clumpGamma = o.colClump?.gamma ?? 1.5;
+      const colBias = o.colClump ? { dirDeg: o.colClump.dirDeg, period: o.colClump.period, phase: i * 2.399963, gamma: clumpGamma, comp: colBiasComp(clumpGamma) } : undefined;
+      this.sprinkleStats(c, st, { style, styleParam: last ? o.lastParam : undefined, sizeMul: o.sizeMul, densityMul: o.densityMul, colBias });
     }
     // Gall water sprinkled last: small clear spots that open the film. A separate layer,
     // so it moves independently of the colours beneath.
@@ -829,7 +845,7 @@ const zebraBase = (b: Builder, round: number[], o: { spacing?: number; sizeMul?:
 /** Nonpareil base: a stone base, the get-gel (a wide comb drawn twice, halving), then a fine comb drawn once
  *  across it. `fine` is the fine comb's spacing: ~4 mm on dp 82; the double combs sit on a coarser nonpareil
  *  (arches 8–10 mm apart, dp 393 and 75), with spots to match. */
-const nonpareilBase = (b: Builder, fine?: number, o: { dir?: number; ripple?: number; bold?: number; plateau?: number; base?: number; width?: number; pull?: number; beforeFine?: (b: Builder) => void; skipFine?: boolean } = {}) => {
+const nonpareilBase = (b: Builder, fine?: number, o: { dir?: number; ripple?: number; bold?: number; plateau?: number; base?: number; width?: number; pull?: number; beforeFine?: (b: Builder) => void; skipFine?: boolean; colClump?: boolean } = {}) => {
   // `fine` is the fine comb's pitch, `base` the pitch the stone base and the get-gel are scaled by. Measured directly
   // (an angle sweep for the strongest across-travel periodicity, 1.5-4 mm band, validated against true-scale crops)
   // over the 47 sheets built on this recipe, the tine pitch clusters tightly at 4.95-6.53 mm, median 5.07 — not the
@@ -860,7 +876,21 @@ const nonpareilBase = (b: Builder, fine?: number, o: { dir?: number; ripple?: nu
   // The drops are thrown larger and sparser than the sheet's own fragments, but only by a third now, not by the
   // fourteenth they were: the drag below is what draws them into bands 5–10 mm wide, where before the band width had
   // to come from the drop itself. Every sheet on this base is refitted for coverage under these numbers.
-  b.turkish({ cell: 16 * Math.sqrt(coarse), sizeMul: 3 * Math.sqrt(coarse) * bold, densityMul: 0.3 / (bold * bold), gallDots: false, shape: 2.5 });
+  // Every spot colour's own stone throw is still its own independent lattice (its own measured perCm2/d50 hold), but
+  // `colClump` biases each one's radius by a shared, low-frequency field across the sheet's own bath mm (not any one
+  // layer's own randomly rotated grid — see LayerSpec.colBias) so a given stretch of the sheet, one `period` wide
+  // across the bands' own direction, favours one or two colours and starves the rest, rather than every colour
+  // sharing every stretch of the bath evenly. A scan's colours never do share the bath evenly (dp 17, user,
+  // 2026-09-12: "mostly thick bands of reds and blues with occasional thin bands of cream and green") because the
+  // marbler's own strokes are never that uniform to begin with — this recreates that unevenness at the stone-throw
+  // stage, before the comb ever draws it into bands, rather than trying to sort already-mixed colours into bands
+  // after the fact (which the comb has no way to do: it can only pull material along, not sort it by colour).
+  // Opt-in, not the base's default: Icarus's own feathered fans want the OPPOSITE, a fine, dense scatter of flecks
+  // throughout (its scan shows every colour worked through every fan), and clumping starved that scatter down to
+  // near-monochrome when tried across the whole family. Only the plain Nonpareil build (dp 17's own recipe and its
+  // close numeric relatives) passes it.
+  const colClump = o.colClump ? { dirDeg: dir + 90 + b.axis, period: b.pal.band?.column ?? 16 * Math.sqrt(coarse) } : undefined;
+  b.turkish({ cell: 16 * Math.sqrt(coarse), sizeMul: 3 * Math.sqrt(coarse) * bold, densityMul: 0.3 / (bold * bold), gallDots: false, shape: 2.5, colClump });
   // The bath is dragged once before any comb touches it (user, 2026-09-11): the rake is drawn the length of the bath
   // and every drop is pulled into a streak along its travel, so what the get-gel then cuts is a field of bands, not a
   // field of blobs. DRAG is the elongation that one pass gives; `widthStretch` (see above) multiplies it further when
@@ -920,7 +950,7 @@ export const RECIPES: Recipe[] = [
       b.sprinkleStats(g, b.statsOf(g, { perCm2: 0.6, d50: 6, wk: 0.9 }), { style: STYLE.METALLIC });
       b.turkish({ cell: 14, ringed: true, gold: false }); return b.drift().scene(); } },
   { name: "Nonpareil", streaks: "h", streakScale: "coarse", /* the get-gel bands as authored run across; the bands are the robust measurement (dp 284: tongues incoherent, bands 0.8) */ group: "Combed", palette: "nonpareil19", palettes: ["nonpareil19", "dp21", "antique19"], terms: ["nonpareil", "get gel", "getgel", "old dutch"], defaults: { ...D19, ...COMBED_LOOK, viscosity: 0.3 }, note: "Get-gel (wide comb twice) then a 2–3 mm comb drawn once.",
-    build: (p, pal) => nonpareilBase(new Builder(p, pal)).drift().scene() },
+    build: (p, pal) => nonpareilBase(new Builder(p, pal), undefined, { colClump: true }).drift().scene() },
 
   { name: "Feather", streaks: "h", group: "Combed", palette: "g229", palettes: ["g229", "g237", "g238", "g29"], terms: ["feather", "chevron"], defaults: { ...D19, viscosity: 0.8, stretchLimit: 1e5, drift: 0 }, note: "A fine comb draws every colour into hair lines; a comb with widely set teeth drawn across them and back, halving, and pulled hard draws the lines into hyperbolae: barbs swooping into the periodic quills and running along them (dp 229).",
     build: (p, pal) => { const b = new Builder(p, pal); const round = roundColours(pal, 1.6); /* on a feather every colour is combed; the fragments' elongation of ~2 is the scan's, not a thrown-after drop's (dp 480: three colours were held back and the feather vanished) */ featherBase(b, round);
