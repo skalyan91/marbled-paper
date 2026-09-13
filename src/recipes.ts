@@ -1042,10 +1042,10 @@ export const RECIPES: Recipe[] = [
       // (count-median 1 mm equivalent diameter, area-median 3–4 mm) of streaks 0.55–0.65 mm wide (p90 1.3–1.7 mm). At 6× the
       // palette's count the fitter's size for the coverage is ~1.2 mm, which the combs drew into ~0.5 × 3 mm streaks, thinner
       // than the sheet's; 4× leaves them ~0.8 × 4 mm.
-      if (!hasWhiteSpot(pal) && (pal.pigments[pal.white].frac ?? 0) > 2) b.sprinkleStats(pal.white, { ...b.statsOf(pal.white, { perCm2: 0.5, d50: 4 }), sig: 0.35, wk: 2.0 }, { sizeMul: 1.2, densityMul: 0.45 });   // larger, fewer (user, 2026-09-12, reversing the 2026-09-10 direction): sizeMul 1.2 (was 0.6) and densityMul 0.45 (was 1) hold the same fitted coverage with half as many, twice the linear size
+      if (!hasWhiteSpot(pal) && (pal.pigments[pal.white].frac ?? 0) > 2) b.sprinkleStats(pal.white, { ...b.statsOf(pal.white, { perCm2: 0.5, d50: 4 }), sig: 0.35, wk: 2.0 }, { sizeMul: 0.65, densityMul: 1.6 });   // smaller, more numerous (2026-09-13, user: "the white dots need to be smaller" — the 2026-09-12 sizeMul 1.2/densityMul 0.45 read too large and blobby against the scan's finer, more varied flecks): sizeMul 0.65 (linear size roughly half the previous), densityMul 1.6 holds the same fitted coverage
       // The analysis filed the other half of the cream as paper (dp 144: paper 11 % beside white 9.7 %, both ≈ #C1B7A3): the
       // sheet has no bare cells, so that share is thrown as small clear drops of the same count, never opened as 8 mm gall cells.
-      { const paper = pal.paperPct ?? 0, perCm2 = 0.3; if (paper > 2) b.sprinkleStats(-1, { perCm2, d50: 10 * 2 * Math.sqrt(paper / 100 / (Math.PI * perCm2)) / 1.6, sig: 0.35, wk: 2.0 }, { style: STYLE.CLEAR, anim: 1.2 }); }
+      { const paper = pal.paperPct ?? 0, perCm2 = 1.2; if (paper > 2) b.sprinkleStats(-1, { perCm2, d50: 10 * 2 * Math.sqrt(paper / 100 / (Math.PI * perCm2)) / 1.6, sig: 0.35, wk: 2.0 }, { style: STYLE.CLEAR, anim: 1.2 }); }   // perCm2 1.2 (was 0.3, 2026-09-13, user: "smaller" — the flecks this throws set d50 ∝ 1/√perCm2, so more of them at the same total area gives smaller flecks; 0.3 had over-corrected the 2026-09-12 speckle fix into blobs of its own)
       // Miura's description puts two straight passes of a one-row comb here, drawn down and back then across and back,
       // before the wave. The user (2026-09-11) says a Peacock is combed only with the two zigzag rows, and the sheets
       // agree: with the straight passes gone dp 144 falls into the scan's plumes of whole colour, where the straight
