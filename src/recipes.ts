@@ -668,7 +668,7 @@ export class Builder {
       // which wasn't decisive enough (user, 2026-09-12: dp 17 was "still showing too many thin bands, as opposed to
       // thick bands of red and blue, and thin bands of green and cream" — a hierarchy of WHICH colours are which,
       // not just when).
-      const [lo, hi] = dominantSet.has(c) ? [0.6, 1.4] : [0.15, 0.6];
+      const [lo, hi] = dominantSet.has(c) ? [1.0, 2.2] : [0.05, 0.3];   // wider than [0.6,1.4]/[0.15,0.6] (2026-09-13): with `dirDeg` now fixed below, the effect actually reaches the final render for the first time, and the milder range read as present but not "thick" (user: "the coloured bands still need to be longer and thicker")
       const colBias = o.colClump ? { dirDeg: o.colClump.dirDeg, period: o.colClump.period, phase: i * 2.399963, lo, hi } : undefined;
       this.sprinkleStats(c, st, { style, styleParam: last ? o.lastParam : undefined, sizeMul: o.sizeMul, densityMul: o.densityMul, colBias });
     }
@@ -896,9 +896,22 @@ const nonpareilBase = (b: Builder, fine?: number, o: { dir?: number; ripple?: nu
   // after the fact (which the comb has no way to do: it can only pull material along, not sort it by colour).
   // Opt-in, not the base's default: Icarus's own feathered fans want the OPPOSITE, a fine, dense scatter of flecks
   // throughout (its scan shows every colour worked through every fan), and clumping starved that scatter down to
-  // near-monochrome when tried across the whole family. Only the plain Nonpareil build (dp 17's own recipe and its
-  // close numeric relatives) passes it.
-  const colClump = o.colClump ? { dirDeg: dir + 90 + b.axis, period: b.pal.band?.column ?? 16 * Math.sqrt(coarse) } : undefined;
+  // near-monochrome when tried across the whole family. The plain Nonpareil recipe passes it only for sheets that
+  // carry their own measured `pal.band` (currently dp 17): turned on for the whole recipe instead, it did the same
+  // thing to dp 82 and dp 21 that it did to Icarus (2026-09-13) — those two have no measured band of their own to
+  // scale the effect by, and the corpus-wide contrast tuned for dp 17 was too strong for their own, more evenly-mixed
+  // character.
+  // `dirDeg` was `dir + 90 + b.axis` (2026-09-12) — exactly the get-gel's own PULL direction (`b.comb(dir + 90, ...)`
+  // below), so its huge `pull` (dp 17: 25 spacings, ~700 mm) smeared the favouritism away along the very axis it
+  // varied on before the render ever showed it: confirmed by rendering the stone base alone (colClump's blocks stood
+  // out clearly) against the same sheet after its get-gel (gone, back to an even fine mix) — not fixable by more
+  // contrast or a wider period, since a big enough pull homogenises ANY variation along its own direction. The get-gel
+  // bands are actually SPACED apart along `dir` (its tines run along dir + 90, `22·√coarse` mm apart along dir), so
+  // that — not the direction the pull smears — is the axis colClump needs to vary along to survive it. Period one
+  // get-gel spacing: colClump's own choice of which columns bunch together should follow the same rhythm the get-gel
+  // is about to cut the sheet into, not a separately guessed scale (user, 2026-09-12: dp 17's "coloured bands still
+  // need to be longer and thicker" — this is what was silently defeating the whole mechanism).
+  const colClump = o.colClump ? { dirDeg: dir + b.axis, period: 22 * Math.sqrt(coarse) } : undefined;
   b.turkish({ cell: 16 * Math.sqrt(coarse), sizeMul: 3 * Math.sqrt(coarse) * bold, densityMul: 0.3 / (bold * bold), gallDots: false, shape: 2.5, colClump });
   // The bath is dragged once before any comb touches it (user, 2026-09-11): the rake is drawn the length of the bath
   // and every drop is pulled into a streak along its travel, so what the get-gel then cuts is a field of bands, not a
@@ -959,7 +972,7 @@ export const RECIPES: Recipe[] = [
       b.sprinkleStats(g, b.statsOf(g, { perCm2: 0.6, d50: 6, wk: 0.9 }), { style: STYLE.METALLIC });
       b.turkish({ cell: 14, ringed: true, gold: false }); return b.drift().scene(); } },
   { name: "Nonpareil", streaks: "h", streakScale: "coarse", /* the get-gel bands as authored run across; the bands are the robust measurement (dp 284: tongues incoherent, bands 0.8) */ group: "Combed", palette: "nonpareil19", palettes: ["nonpareil19", "dp21", "antique19"], terms: ["nonpareil", "get gel", "getgel", "old dutch"], defaults: { ...D19, ...COMBED_LOOK, viscosity: 0.3 }, note: "Get-gel (wide comb twice) then a 2–3 mm comb drawn once.",
-    build: (p, pal) => nonpareilBase(new Builder(p, pal), undefined, { colClump: true }).drift().scene() },
+    build: (p, pal) => nonpareilBase(new Builder(p, pal), undefined, { colClump: pal.band !== undefined }).drift().scene() },
 
   { name: "Feather", streaks: "h", group: "Combed", palette: "g229", palettes: ["g229", "g237", "g238", "g29"], terms: ["feather", "chevron"], defaults: { ...D19, viscosity: 0.8, stretchLimit: 1e5, drift: 0 }, note: "A fine comb draws every colour into hair lines; a comb with widely set teeth drawn across them and back, halving, and pulled hard draws the lines into hyperbolae: barbs swooping into the periodic quills and running along them (dp 229).",
     build: (p, pal) => { const b = new Builder(p, pal); const round = roundColours(pal, 1.6); /* on a feather every colour is combed; the fragments' elongation of ~2 is the scan's, not a thrown-after drop's (dp 480: three colours were held back and the feather vanished) */ featherBase(b, round);
