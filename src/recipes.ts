@@ -1037,7 +1037,7 @@ export const RECIPES: Recipe[] = [
 
   { name: "Peacock", streaks: "v", group: "Combed", palette: "peacock19", palettes: ["peacock19"], terms: ["peacock", "augen"], defaults: { ...D19, ...COMBED_LOOK, viscosity: 0.3 }, note: "Turkish, then a comb with two rows of teeth drawn down the sheet in a zigzag: the colours are quilted into tall plumes, each with the stone spots inside (dp 144).",
     build: (p, pal) => {
-      const b = new Builder(p, pal); turkishBase(b, 2.6, { shape: 2.0, paperCells: false });   // 2.6 (from 1.6; user, 2026-09-12: "larger dots... to match the larger cells" — a 60 mm true-scale crop of dp 144 measures blobs 5-8 mm across, bigger than the 3.7-5 mm this was tuned to) // shape 2: no giants in the tail, which merged into 6–9 mm blobs
+      const b = new Builder(p, pal); turkishBase(b, 2.6, { shape: 2.0, paperCells: false, gallDots: false });   // 2.6 (from 1.6; user, 2026-09-12: "larger dots... to match the larger cells" — a 60 mm true-scale crop of dp 144 measures blobs 5-8 mm across, bigger than the 3.7-5 mm this was tuned to) // shape 2: no giants in the tail, which merged into 6–9 mm blobs // gallDots: false (2026-09-13, user: "greatly reduce the number of small white dots"): turkish()'s own default gall-water shower (a small clear-drop population meant for sheets with no other paper/white modelling) was still running here ON TOP of the two populations below that already model dp 144's white/paper fractions directly — three overlapping small-white-dot sources read as a fine all-over speckle the scan doesn't show
       // The cream is thrown small and many (user: the white dots much smaller). dp 144 at 0.077 mm/px: 2–3.4 fragments per cm²
       // (count-median 1 mm equivalent diameter, area-median 3–4 mm) of streaks 0.55–0.65 mm wide (p90 1.3–1.7 mm). At 6× the
       // palette's count the fitter's size for the coverage is ~1.2 mm, which the combs drew into ~0.5 × 3 mm streaks, thinner
@@ -1045,7 +1045,7 @@ export const RECIPES: Recipe[] = [
       if (!hasWhiteSpot(pal) && (pal.pigments[pal.white].frac ?? 0) > 2) b.sprinkleStats(pal.white, { ...b.statsOf(pal.white, { perCm2: 0.5, d50: 4 }), sig: 0.35, wk: 2.0 }, { sizeMul: 1.2, densityMul: 0.45 });   // larger, fewer (user, 2026-09-12, reversing the 2026-09-10 direction): sizeMul 1.2 (was 0.6) and densityMul 0.45 (was 1) hold the same fitted coverage with half as many, twice the linear size
       // The analysis filed the other half of the cream as paper (dp 144: paper 11 % beside white 9.7 %, both ≈ #C1B7A3): the
       // sheet has no bare cells, so that share is thrown as small clear drops of the same count, never opened as 8 mm gall cells.
-      { const paper = pal.paperPct ?? 0, perCm2 = 3; if (paper > 2) b.sprinkleStats(-1, { perCm2, d50: 10 * 2 * Math.sqrt(paper / 100 / (Math.PI * perCm2)) / 1.6, sig: 0.35, wk: 2.0 }, { style: STYLE.CLEAR, anim: 1.2 }); }
+      { const paper = pal.paperPct ?? 0, perCm2 = 0.3; if (paper > 2) b.sprinkleStats(-1, { perCm2, d50: 10 * 2 * Math.sqrt(paper / 100 / (Math.PI * perCm2)) / 1.6, sig: 0.35, wk: 2.0 }, { style: STYLE.CLEAR, anim: 1.2 }); }
       // Miura's description puts two straight passes of a one-row comb here, drawn down and back then across and back,
       // before the wave. The user (2026-09-11) says a Peacock is combed only with the two zigzag rows, and the sheets
       // agree: with the straight passes gone dp 144 falls into the scan's plumes of whole colour, where the straight
