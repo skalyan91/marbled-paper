@@ -1009,7 +1009,7 @@ export const RECIPES: Recipe[] = [
       // the fans thin and pale). `bold` dropped in favour of the sheet's own measured width (0.4 mm, `widthStretch`'s
       // 0.69 mm baseline) — base alone (tried at 4/7/10) stayed muddy and under-banded; base+width together read far
       // denser and more saturated. `pull` 15 is the get-gel's own draw length.
-      const b = nonpareilBase(new Builder(p, pal), 4, { ripple: 3, plateau: 12, base: 10, width: 0.4, pull: 15 }); // get-gel across, 4 mm fine comb down, pulled hard so the small tongues show inside the fans; bands 3–5 mm wide on dp 172, bolder than dp 82: columns of tongues (dp 172: 5.7–6.3 mm tongue period inside the cups, spread 1.43×)
+      const b = nonpareilBase(new Builder(p, pal), 4, { ripple: 3, plateau: 12, base: 10, width: 1.1, pull: 15 }); // width 1.1 (was 0.4, 2026-09-13: user, "Bouquet has wider bands" — the scan's own cream/purple/orange run in wide chunky bands, not the fine dense stripe 0.4 drew) // get-gel across, 4 mm fine comb down, pulled hard so the small tongues show inside the fans; bands 3–5 mm wide on dp 172, bolder than dp 82: columns of tongues (dp 172: 5.7–6.3 mm tongue period inside the cups, spread 1.43×)
       // Two interleaved tine sets 74 mm apart (adjacent lines 37 mm), in opposite phase, with the wave's amplitude half the
       // separation of adjacent lines (18.5 mm): neighbouring lines touch once a wavelength, so the sheet is quilted into
       // closed cells, each nonpareil column fanning out into a bouquet and pinching to a stem; the cells of adjacent
