@@ -668,7 +668,7 @@ export class Builder {
       // which wasn't decisive enough (user, 2026-09-12: dp 17 was "still showing too many thin bands, as opposed to
       // thick bands of red and blue, and thin bands of green and cream" — a hierarchy of WHICH colours are which,
       // not just when).
-      const [lo, hi] = dominantSet.has(c) ? [1.0, 2.2] : [0.05, 0.3];   // wider than [0.6,1.4]/[0.15,0.6] (2026-09-13): with `dirDeg` now fixed below, the effect actually reaches the final render for the first time, and the milder range read as present but not "thick" (user: "the coloured bands still need to be longer and thicker")
+      const [lo, hi] = dominantSet.has(c) ? [1.0, 2.2] : [0.5, 1.3];   // accent raised again, [0.3,0.9] was still too faint (user: "I can hardly see the cream and green bands! They need to be much thicker") — [0.5,1.3] overlaps the bottom of the dominant range's own [1.0,2.2] at its own crest, so an accent colour's best columns can stand genuinely thick, not just less-thin; it still reads as the lesser tier because its crest is rarer (same period, later phase) and its trough is real absence, where a dominant colour's trough (1.0) never drops far
       const colBias = o.colClump ? { dirDeg: o.colClump.dirDeg, period: o.colClump.period, phase: i * 2.399963, lo, hi } : undefined;
       this.sprinkleStats(c, st, { style, styleParam: last ? o.lastParam : undefined, sizeMul: o.sizeMul, densityMul: o.densityMul, colBias });
     }
