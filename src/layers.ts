@@ -304,6 +304,42 @@ function relaxOverlaps(s: LayerStatic, spec: LayerSpec) {
     if (sumOver < 1e-4) break;   // whatever remains is float noise at the d ≈ want boundary, not a real overlap
     if (!shrunk) break;
   }
+  // Whatever is still overlapping past that (both drops already at their floor) is a knot too crowded for either
+  // pairwise move to fully resolve: a small share of same-colour neighbours, denser since `turkishBase` started
+  // drawing every Turkish-based sheet's spots ~14% larger for their cell (densityMul 1.3, added after the base
+  // this session's peanut fixes were checked against) — that shift is real but affects every sheet's own fitted
+  // coverage, not something to unwind here. Left as a partial overlap it is exactly the peanut waist (user,
+  // 2026-09-13: "I'm still seeing peanuts... I don't remember seeing them in the first version of Turkish"); rather
+  // than settle for a visible waist or reopen the whole collection's calibration, drop the SMALLER of the pair
+  // outright — a stone base throws far more drops than any one comb pass draws out, so losing the rare one a knot
+  // has no room for is invisible in the aggregate, where a lingering seam between two circles is not.
+  // Clear/dispersant layers (gall water: colours = [-1], see Builder.sprinkle) are the wrong target for this: their
+  // own jitter is large relative to their tiny radius by design (a fine, dense scatter, not a few big spots), so
+  // "still overlapping after the floor" is normal there, not a knot. `spec.rMax` (0.8 for "small", set whenever
+  // `sprinkleStats` computes a radius ≤ 0.3 cells — true of most of a sheet's actual pigment spots too, not just
+  // gall water) is NOT the right signal to gate on: it disabled this pass for every colour layer on dp 370, not
+  // just the one it was meant for. `colours[0] === -1` is what actually marks a dispersant/clear layer. Applying
+  // this pass to the gall layer regardless ate 14780 of 16384 cells on first try (nearly the whole layer), erasing
+  // the fine paper speckle it exists to draw.
+  if (spec.colours[0] === -1) return;
+  for (let y = 0; y < TILE; y++) {
+    for (let x = 0; x < TILE; x++) {
+      const i = at(x, y);
+      if (s.r[i] <= 0) continue;
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          if (dx === 0 && dy === 0) continue;
+          const j = at(x + dx, y + dy);
+          if (s.r[j] <= 0 || j <= i) continue;   // each pair once
+          const px = dx + s.jx[j] - s.jx[i], py = dy + s.jy[j] - s.jy[i];
+          const d = Math.hypot(px, py);
+          const want = s.r[i] + s.r[j];
+          if (d >= want - 1e-3) continue;        // not floating-point noise
+          if (s.r[i] <= s.r[j]) s.r[i] = 0; else s.r[j] = 0;
+        }
+      }
+    }
+  }
 }
 
 export class LayerBank {
