@@ -4,7 +4,7 @@ import interleaveSrc from "./shaders/interleave.frag?raw";
 import farSrc from "./shaders/far.frag?raw";
 import { MAX_OPS as OPS_PER_CHAIN, FLOATS_PER_OP, packOps, OP } from "./ops";
 import { LayerBank, MAX_LAYERS, type LayerSpec } from "./layers";
-import { RECIPES, PALETTES, Builder, type Params, type Scene, type Palette } from "./recipes";
+import { RECIPES, VISIBLE_RECIPES, PALETTES, Builder, type Params, type Scene, type Palette } from "./recipes";
 import { makeGui, DEBUG_MODES, palettesFor, bestRecipeFor, type Settings } from "./gui";
 
 const canvas = document.getElementById("c") as HTMLCanvasElement;
@@ -39,7 +39,7 @@ function sheetWidthMm() {
 }
 const url = new URL(location.href);
 const settings: Settings = {
-  pattern: url.searchParams.get("pattern") ?? RECIPES[0].name,
+  pattern: url.searchParams.get("pattern") ?? VISIBLE_RECIPES[0].name,
   palette: "",
   seed: Number(url.searchParams.get("seed") ?? 1234),
   viscosity: 0.35,
@@ -82,7 +82,7 @@ const settings: Settings = {
   randomSeed: () => { settings.seed = Math.floor(Math.random() * 9999) + 1; markDirty(); },
   randomAll: () => {
     // as if the user had picked them: pattern defaults and the sheet list first, then the sheet and seed
-    const r = RECIPES[Math.floor(Math.random() * RECIPES.length)];
+    const r = VISIBLE_RECIPES[Math.floor(Math.random() * VISIBLE_RECIPES.length)];
     selectPattern(r.name);
     const sheets = palettesFor(r.name);
     settings.palette = sheets[Math.floor(Math.random() * sheets.length)].short!;
@@ -91,7 +91,7 @@ const settings: Settings = {
     markDirty();
   },
 };
-if (!RECIPES.some((r) => r.name === settings.pattern)) settings.pattern = RECIPES[0].name;
+if (!VISIBLE_RECIPES.some((r) => r.name === settings.pattern)) settings.pattern = VISIBLE_RECIPES[0].name;
 settings.palette = defaultSheet(settings.pattern);
 
 // --------------------------------------------------------------- shaders
@@ -714,9 +714,9 @@ window.addEventListener("keydown", (e) => {
   if (e.target instanceof HTMLInputElement) return;
   if (e.key === " ") { settings.animate = !settings.animate; markDirty(); }
   else if (e.key === "n" || e.key === "p") {
-    const i = RECIPES.findIndex((r) => r.name === settings.pattern);
-    const j = (i + (e.key === "n" ? 1 : RECIPES.length - 1)) % RECIPES.length;
-    selectPattern(RECIPES[j].name);
+    const i = VISIBLE_RECIPES.findIndex((r) => r.name === settings.pattern);
+    const j = (i + (e.key === "n" ? 1 : VISIBLE_RECIPES.length - 1)) % VISIBLE_RECIPES.length;
+    selectPattern(VISIBLE_RECIPES[j].name);
   } else if (e.key === "s") savePng();
   else if (e.key === "r") settings.randomSeed();
   else if (e.key === "x") settings.randomAll();
@@ -729,8 +729,8 @@ canvas.addEventListener("pointerup", (e) => {
   const dx = e.clientX - swipe.x, dy = e.clientY - swipe.y;
   swipe = null;
   if (Math.abs(dx) > 60 && Math.abs(dx) > 2 * Math.abs(dy)) {
-    const i = RECIPES.findIndex((r) => r.name === settings.pattern);
-    selectPattern(RECIPES[(i + (dx < 0 ? 1 : RECIPES.length - 1)) % RECIPES.length].name);
+    const i = VISIBLE_RECIPES.findIndex((r) => r.name === settings.pattern);
+    selectPattern(VISIBLE_RECIPES[(i + (dx < 0 ? 1 : VISIBLE_RECIPES.length - 1)) % VISIBLE_RECIPES.length].name);
   }
 });
 canvas.addEventListener("touchstart", (e) => { if (e.touches.length === 2) { settings.animate = !settings.animate; gui.controllersRecursive().forEach((c) => c.updateDisplay()); markDirty(); } }, { passive: true });

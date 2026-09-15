@@ -89,6 +89,10 @@ const PALETTES_RAW: Palette[] = [
   { key: "turkish17", name: "17th-c. Turkish: red, dark blue, dark green, blue, light blue, yellow", source: "dp 370", streak: [32.9, 0.017, 60.8, 0.004], paper: "#E2D2B2",
     pigments: [K(E(F("red", "#942E38", 30.8, 0.1, 2.03, 0.6, 0.96, 0.55), 2.79), 0.6), K(E(F("dark blue", "#2C3A55", 16, 0.3, 4.23, 0.9, 1, 0.4), 2.13), 0.88), K(E(F("dark green", "#2F4838", 16, 0.3, 3.56, 0.9, 1, 0.4), 2.13), 0.88), K(E(F("blue", "#485F8F", 5.9, 0.19, 2.74, 0.8, 0.92, 0.55), 2.61), 0.82), K(E(F("light blue", "#A6B2A9", 19.0, 0.27, 4.87, 0.9, 0.97, 0.55), 1.34), 1.04), K(E(F("yellow", "#D38E43", 4.5, 0.18, 4.16, 0.65, 1, 0.6), 2.72), 1.22), WHITE],
     background: 0, spots: [1, 2, 3, 5, 4], pack: { jitter: 0.26, sigma: 0.45 }, paperPct: 7.7, white: 6, laid: true }, // catalogue: "red, dark, medium and light blues, dark green and yellow"
+  // NB (2026-09-14): this entry is dead code — src/palettes.generated.ts has its own "turkish17" key, and
+  // PALETTES filters out any PALETTES_RAW entry whose key also exists in GENERATED, so the generated entry always
+  // wins. Left as-is (reverted to its original values) rather than removed, matching every other superseded
+  // PALETTES_RAW entry in this file — see the "hasWhiteSpot" style comment at the top of PALETTES_RAW.
   { key: "frenchcurl19", name: "19th-c. French curl on Turkish: maroon, cream, blue, olive", source: "dp 20", streak: [99.6, 0.061, 110.3, 0.034], paper: "#E6D8BC",
     pigments: [K(E(F("maroon", "#983D4A", 32.6, 1.51, 1.99, 0.6, 0.96, 0.55), 2.94), 0.76), K(E(F("indigo", "#39416E", 11.3, 1.54, 2.49, 0.46, 0.9, 0.55), 1.88), 1.01), K(E(F("olive", "#9D9574", 6.3, 0.75, 2.08, 0.5, 0.9, 0.6), 2.2), 0.99), K(E(F("cream", "#EFC9BB", 46.6, 3.76, 2.29, 0.56, 1, 0.4), 2.27), 0.86), WHITE, K(F("bronze", "#C69268", 0.2, 0.03, 1.4, 0.6, 0.9, 0.7), 0.85)],
     background: 0, spots: [1, 2, 3], paperPct: 2.9, white: 4, gold: 5 },
@@ -397,7 +401,7 @@ export class Builder {
   private rnd(i: number) { return hash01(this.p.seed + 1, this.n * 131 + i + 17); }
 
   /** Sprinkle a layer. cellMm and radius (cells) are nominal; density/gall scale them. */
-  sprinkle(colours: number[], o: { cell: number; r?: number; sigma?: number; jitter?: number; fill?: number; style?: number; styleParam?: number; wobble?: number; gallMul?: number; anim?: number; ring?: number; small?: boolean; gapFill?: number; shape?: number; floorMm?: number; cross?: number; colBias?: { dirDeg: number; period: number; phase: number; lo: number; hi: number } }) {
+  sprinkle(colours: number[], o: { cell: number; r?: number; sigma?: number; jitter?: number; fill?: number; style?: number; styleParam?: number; wobble?: number; gallMul?: number; anim?: number; ring?: number; small?: boolean; gapFill?: number; shape?: number; floorMm?: number; cross?: number; colBias?: { dirDeg: number; period: number; phase: number; lo: number; hi: number }; rowPeriod?: number; alignDeg?: number }) {
     const slot = this.layers.length;
     if (slot >= 8) return this;
     const p = this.p;
@@ -407,11 +411,38 @@ export class Builder {
     // the sheets do not show (user, 2026-09-11). The proximity the scans really carry is between drops of DIFFERENT
     // colours, and that is the constriction's to produce: a later drop pushes the earlier film into the gaps between
     // its neighbours, which is how paint comes to lie against paint.
-    const r0 = Math.min(0.66, (o.r ?? 0.5) * (o.gallMul ?? 1) * (0.55 + 0.45 * p.gall));
-    const cell = o.cell / p.density;
+    // `rowPeriod` shrinks the grid `cellScale`-fold (denser within a row) and scales the radius back up by the same
+    // factor (so the absolute drop size the caller asked for is unchanged); LayerSpec.rowPeriod then forces all but
+    // one row in every `rowPeriod` empty. The two exactly cancel in areal density: `rowPeriod`-fold denser rows,
+    // 1-in-`rowPeriod` of them kept, is the same drops-per-mm² the caller's own `o.cell`/density asked for — rows
+    // are a rearrangement of the same throw, not a different one.
+    // A same-strength radius scaling was not enough on its own to make a row read as a band rather than a string of
+    // separate dots (user, 2026-09-14: "dot runs are being broken up rather than collected into bands"): a comb's
+    // displacement (invComb) depends only on the PERPENDICULAR coordinate, so every point along one row gets
+    // exactly the same shift — it translates a row rigidly but can never close a gap between two dots already in
+    // it. Whatever a row looks like BEFORE any comb touches it is what a comb is stuck with along its own length.
+    // So a row's own dots must already touch: floored at 0.58 (diameter > cell spacing) whenever `rowPeriod` is
+    // set, guaranteeing along-row overlap regardless of how small a colour's own natural size would otherwise land.
+    const cellScale = o.rowPeriod ? Math.sqrt(o.rowPeriod) : 1;
+    const r0raw = (o.r ?? 0.5) * cellScale * (o.gallMul ?? 1) * (0.55 + 0.45 * p.gall);
+    const r0 = Math.min(0.66, o.rowPeriod ? Math.max(0.58, r0raw) : r0raw);
+    const cell = o.cell / p.density / cellScale;
     const r = r0;
     const jitter = o.jitter ?? 0.46;
-    const ecc = this.landing;   // the ellipse this sheet's drops land as, before any later throw constricts them
+    // 2026-09-14 (user): drops now land circular; every bit of visible elongation is left to do the two things
+    // that are already fully, separately modelled and DO vary drop to drop — constriction (later throws squeezing
+    // an earlier film outward, near field in candidate() plus the Jaffer far field) and drag (invComb/invStretch/
+    // invShear warping the whole local frame a drop is tested against) — rather than starting every drop with the
+    // SAME sheet-wide intrinsic ellipse (`LANDING_EL`/`this.landing`, previously threaded through here) on top of
+    // that. The landing ellipse was a real, measured effect (the last-thrown colour, unconstricted by anything
+    // after it, still stands 1.3-1.7:1 on the scans) but it was uniform in STRENGTH across a whole sheet with only
+    // its axis randomised per drop (`hw` in candidate()), so a drop whose landing axis happened to run across the
+    // grain of its own local constriction could come out lopsided rather than a clean ellipse — a peanut not from
+    // same-colour overlap (relaxOverlaps' own, different peanut fix in layers.ts) but from two elongating effects
+    // fighting over one shape. Tested against the scan before keeping this (see chat): if the last-thrown colour's
+    // now-circular spots read as a visible, objectionable regression, `this.landing` (still computed from
+    // ELONGATION/LANDING_EL) is the value to reintroduce here, not a reason to rebuild the mechanism.
+    const ecc = 0;
     // A colour thrown in several passes rather than one (the marbler covers the bath, sees the gaps and throws again)
     // was tried here and taken out again on 2026-09-11. Holding the area a colour COVERS fixed while splitting it into
     // k independent passes does raise the area it THROWS, which is what shears the films beneath — but only from φ
@@ -433,8 +464,12 @@ export class Builder {
       shape: o.shape,
       floor: o.floorMm !== undefined ? o.floorMm / 2 / cell : undefined,
       colBias: o.colBias,
+      rowPeriod: o.rowPeriod,
     };
-    const ang = this.rnd(1) * Math.PI * 2;
+    // `alignDeg`, world-frame degrees: overrides the grid's usually-random rotation so a `rowPeriod` layer's rows
+    // (fixed local-y, the rest of that grid forced empty — see LayerSpec.rowPeriod) run along a chosen physical
+    // direction (the get-gel's own pull axis) instead of landing at whatever angle the seed happened to draw.
+    const ang = o.alignDeg !== undefined ? (o.alignDeg * Math.PI) / 180 : this.rnd(1) * Math.PI * 2;
     spec.origin = [(this.rnd(2) - 0.5) * cell, (this.rnd(3) - 0.5) * cell];
     spec.rot = ang;
     spec.isSpot = !!o.small && colours[0] >= 0;
@@ -460,13 +495,13 @@ export class Builder {
   }
 
   /** Sprinkle by measured statistics: spots per cm², median diameter (mm), log-normal spread. */
-  sprinkleStats(colour: number, st: { perCm2: number; d50: number; sig: number; wk?: number }, o: { style?: number; styleParam?: number; anim?: number; densityMul?: number; sizeMul?: number; wobble?: number; jitter?: number; minDens?: number; colBias?: { dirDeg: number; period: number; phase: number; lo: number; hi: number } } = {}) {
+  sprinkleStats(colour: number, st: { perCm2: number; d50: number; sig: number; wk?: number }, o: { style?: number; styleParam?: number; anim?: number; densityMul?: number; sizeMul?: number; wobble?: number; jitter?: number; minDens?: number; colBias?: { dirDeg: number; period: number; phase: number; lo: number; hi: number }; rowPeriod?: number; alignDeg?: number } = {}) {
     const dens = st.perCm2 * (o.densityMul ?? 1);
     const cellMm = 10 / Math.sqrt(Math.max(o.minDens ?? 0.05, dens));   // the 0.05 floor is part of every fitted sheet's regime; Placard's few huge drops pass minDens 0.006
     const r = (st.d50 * 1.35 * (o.sizeMul ?? 1)) / 2 / cellMm; // ×1.35: scan components are fragmented by later colours; clamped ≤ 0.8 cell in the bake
     const pk = this.pal.pack ?? {};
     const rr = r / (0.55 + 0.45 * this.p.gall);
-    return this.sprinkle([colour], { cell: cellMm * this.p.density, r: rr, sigma: Math.min(st.sig, pk.sigma ?? 9), fill: 1, jitter: o.jitter ?? pk.jitter ?? 0.46, style: o.style, styleParam: o.styleParam, wobble: o.wobble, anim: o.anim ?? 1, small: rr <= 0.3, shape: st.wk ?? 1.1, floorMm: 1.2, colBias: o.colBias });
+    return this.sprinkle([colour], { cell: cellMm * this.p.density, r: rr, sigma: Math.min(st.sig, pk.sigma ?? 9), fill: 1, jitter: o.jitter ?? pk.jitter ?? 0.46, style: o.style, styleParam: o.styleParam, wobble: o.wobble, anim: o.anim ?? 1, small: rr <= 0.3, shape: st.wk ?? 1.1, floorMm: 1.2, colBias: o.colBias, rowPeriod: o.rowPeriod, alignDeg: o.alignDeg });
   }
 
   /** Straight comb: tines spaced `spacing` mm along the perpendicular, moving in `dirDeg`.
@@ -610,7 +645,7 @@ export class Builder {
   /** Turkish / stone base, laid as on the 17th–18th-c. sheets: the background colour thrown
    *  first and generously (it keeps 25–45 % of the area), then the spot colours in laying order
    *  with their measured size distributions, then gall water as small clear spots. */
-  turkish(o: { spots?: number; cell?: number; bgCell?: number; bgR?: number; bgFill?: number; lastStyle?: number; lastParam?: number; ringed?: boolean; fill?: number; gallDots?: boolean; skipBackground?: boolean; sizeMul?: number; densityMul?: number; gold?: boolean; ground?: number; exclude?: number[]; shape?: number; paperCells?: boolean; colClump?: { dirDeg: number; period: number } } = {}) {
+  turkish(o: { spots?: number; cell?: number; bgCell?: number; bgR?: number; bgFill?: number; bg2Fill?: number; bg2Cell?: number; bg3Fill?: number; bg3Cell?: number; lastStyle?: number; lastParam?: number; ringed?: boolean; fill?: number; gallDots?: boolean; skipBackground?: boolean; sizeMul?: number; densityMul?: number; gold?: boolean; ground?: number; exclude?: number[]; shape?: number; paperCells?: boolean; colClump?: { dirDeg: number; period: number }; rowPeriod?: number; alignDeg?: number } = {}) {
     const pal = this.pal;
     const cell = o.cell ?? 12;
     const groundIdx = o.ground ?? pal.background;
@@ -626,6 +661,15 @@ export class Builder {
       // (Drops of ~1 cell radius would lose mass to the neighbourhood window and open false gaps.)
       if (fill >= 0.95 && o.bgR === undefined) this.groundFill = groundIdx;
       else this.sprinkle([groundIdx], { cell: o.bgCell ?? cell * 0.8, r: o.bgR ?? pal.bg?.r ?? 0.5, sigma: 0.15, jitter: 0.3, fill, style: o.ringed ? STYLE.RINGED : 0, anim: 0.8 });
+      // A second, independent pass of the SAME ground colour (user, 2026-09-15: "how about two throws of umber?"),
+      // laid down here — right after the first ground throw, before gold or any spot — so it sits ON TOP of the
+      // first ground pass but BELOW every spot thrown after it (user: "make sure the second umber throw is... below
+      // any other colour"). Landing at independent jittered positions, it catches some of the first pass's own gaps
+      // without shrinking any drop the way tightening `bgCell` does.
+      if (o.bg2Fill !== undefined) this.sprinkle([groundIdx], { cell: o.bg2Cell ?? o.bgCell ?? cell * 0.8, r: o.bgR ?? pal.bg?.r ?? 0.5, sigma: 0.15, jitter: 0.3, fill: o.bg2Fill, style: o.ringed ? STYLE.RINGED : 0, anim: 0.8 });
+      // A third pass, same idea again (user, 2026-09-15: "maybe add a third throw?") — same mechanism as the
+      // second, its own independent jittered positions catching whatever the first two still missed.
+      if (o.bg3Fill !== undefined) this.sprinkle([groundIdx], { cell: o.bg3Cell ?? o.bg2Cell ?? o.bgCell ?? cell * 0.8, r: o.bgR ?? pal.bg?.r ?? 0.5, sigma: 0.15, jitter: 0.3, fill: o.bg3Fill, style: o.ringed ? STYLE.RINGED : 0, anim: 0.8 });
     }
     // Bronze/gold ink, where the sheet has a measurable amount, is the first colour thrown (UW: it
     // ends up as the vein colour). Recipes that throw it themselves pass gold: false.
@@ -670,7 +714,7 @@ export class Builder {
       // not just when).
       const [lo, hi] = dominantSet.has(c) ? [1.0, 2.2] : [0.5, 1.3];   // accent raised again, [0.3,0.9] was still too faint (user: "I can hardly see the cream and green bands! They need to be much thicker") — [0.5,1.3] overlaps the bottom of the dominant range's own [1.0,2.2] at its own crest, so an accent colour's best columns can stand genuinely thick, not just less-thin; it still reads as the lesser tier because its crest is rarer (same period, later phase) and its trough is real absence, where a dominant colour's trough (1.0) never drops far
       const colBias = o.colClump ? { dirDeg: o.colClump.dirDeg, period: o.colClump.period, phase: i * 2.399963, lo, hi } : undefined;
-      this.sprinkleStats(c, st, { style, styleParam: last ? o.lastParam : undefined, sizeMul: o.sizeMul, densityMul: o.densityMul, colBias });
+      this.sprinkleStats(c, st, { style, styleParam: last ? o.lastParam : undefined, sizeMul: o.sizeMul, densityMul: o.densityMul, colBias, rowPeriod: o.rowPeriod, alignDeg: o.alignDeg });
     }
     // Gall water sprinkled last: small clear spots that open the film. A separate layer,
     // so it moves independently of the colours beneath.
@@ -810,7 +854,7 @@ const featherBase = (b: Builder, exclude: number[], spacing = 55) => {
   // Within a millimetre or two of each quill the bands are sheared fine and average dark, as on the scan; the
   // line width elsewhere is set by the base and the first comb. A ripple of 1.5 spacings gives the scan's ~70°
   // crossing (measured against its orientation histogram).
-  b.comb2(0, spacing, { ripple: 1.5 });   // comb2's sharp default: log wake, 0.5 mm core
+  b.comb2(0, spacing, { ripple: 2.0 });   // comb2's sharp default: log wake, 0.5 mm core; ripple raised from 1.5 (user, 2026-09-14: "the angle at the inflection point should be increased" — the quill cusp's crossing angle, ~70° at 1.5)
   b.still = false;
   return b;
 };
@@ -825,31 +869,121 @@ const featherBase = (b: Builder, exclude: number[], spacing = 55) => {
  *  shape of 1.6 carries the tail to ~16 mm at p90 and ~21 mm for the largest of ~50 drops. (The earlier 0.05 per cm² at
  *  d50 19 rendered them at p50 25–30 mm, p90 45–60: three times the scans'.) */
 const ZEBRA_DROPS = { perCm2: 0.14, d50: 6, sig: 0.3, wk: 1.6 };
-const zebraBase = (b: Builder, round: number[], o: { spacing?: number; sizeMul?: number; densityMul?: number } = {}) => {
+const zebraBase = (b: Builder, round: number[], o: { spacing?: number; sizeMul?: number; densityMul?: number; gallDots?: boolean; bgFill?: number; bgR?: number; bgCell?: number; bg2Fill?: number; bg2Cell?: number; bg3Fill?: number; bg3Cell?: number } = {}) => {
   const pal = b.pal;
   b.still = true;
   const darkest = pal.spots.reduce((a, c) => (luma(pal.pigments[c].hex) < luma(pal.pigments[a].hex) ? c : a), pal.spots[0]);
-  // Swap only where the analysis called a *pale* colour the ground (dp 15, 386); where the ground is itself the darkest
-  // colour and the paper shows between the bands (dp 25, 177: 45–50 % paper) the throw stands as measured.
+  // Whether the base throws a *pale* colour again, later, as large drops that sit on the bands (dp 15, 386) — not
+  // where the darkest spot IS the ground colour and paper shows between the bands instead (dp 25, 177: 45–50 %
+  // paper), a different sheet shape entirely.
   const pale = round.length || luma(pal.pigments[pal.background].hex) < luma(pal.pigments[darkest].hex) + 0.05 ? undefined : pal.background;
-  const ground = pale === undefined ? undefined : darkest;
-  b.turkish({ cell: 16, sizeMul: o.sizeMul ?? 4, densityMul: o.densityMul ?? 0.45, gallDots: false, exclude: round, shape: 2.5, ground });
-  // The pale colour is in the bands too (dp 15, 386: tan and yellow bands among the dark ones), not only in the final
-  // drops: thrown last into the base for the rest of its measured share (ZEBRA_DROPS cover ~11 % before the overlaps).
-  // The fitter cannot drive it (no d50 was measured for a ground colour), so its band size is set here from the share.
-  if (pale !== undefined) {
-    const bandFrac = Math.max(2, (pal.pigments[pale].frac ?? 25) - 11.6);
-    const D = Math.sqrt(bandFrac / 0.88 / 0.1696);   // median drop (mm): 0.18 per cm² (perCm2 0.4 × 0.45) of shape-2.5 drops cover 0.1696 % per mm² of D², 12 % of them hidden under the final drops
-    b.sprinkleStats(pale, { perCm2: 0.4, d50: D / (1.35 * (o.sizeMul ?? 4)), sig: 0.6, wk: 2.5 }, { sizeMul: o.sizeMul ?? 4, densityMul: o.densityMul ?? 0.45 });
-  }
+  // 2026-09-14 (user correction): "Ochre is *not* the solid base — white is! In fact, there is no ochre in the
+  // Turkish base at all!" — this had been forcing SOME spot colour (first the darkest, `black`; then, chasing
+  // that, `pal.background` itself, `ochre`) to lay down as a 100 %-solid ground film first, everything else drawn
+  // over it. Wrong on both counts: the Turkish base has no solid ink ground at all — the paper itself (white) is
+  // the base, and every spot (including the eventual "large drops sit on the bands" colour) is sprinkled directly
+  // onto it, on equal footing, `skipBackground: true` below. `ground`/`bgFill`/`bgR` — the machinery for forcing
+  // one colour into that (wrong) role — removed from this function's own option surface entirely; `turkish()`
+  // itself still supports them for sheets that genuinely do have a solid first-colour film (most non-Zebra ones).
+  // green/black's own perCm2/d50 (palettes.generated.ts) were raised chasing the ground-film idea; kept at those
+  // values here since, thrown straight onto paper instead, they still land close to their own measured targets
+  // (checked: green 10.2 % against 10.33, yellow 6.7 against 6.87, umber 15.2 against 15.37, black 22.4 against
+  // 20.03) — the sizing needed for a sheet with no solid ground turns out close to what the ground-film chase
+  // already found, just for a different, now-correct, reason.
+  // Second ground pass (user, 2026-09-15: "how about two throws of umber?") — a second, independent sprinkle of the
+  // SAME ground colour at the SAME drop size as the first (not a finer lattice), landing in different jittered
+  // positions and so catching some of the first pass's own gaps without shrinking any drop — unlike tightening
+  // `bgCell`, which only ever closes gaps by making every drop smaller (and so more easily cut into fragments by
+  // whatever paints over it later). First tried as a separate `b.sprinkle()` call here, AFTER `turkishBase`
+  // returns — wrong: `turkishBase`/`turkish()` already throws every OTHER spot (black/yellow/green) internally, so
+  // a call placed after it returns lands on top of all of them, not below (user: "make sure the second umber throw
+  // is... below any other colour"), which is exactly why the first attempt at high fill (0.5) blew black/yellow/
+  // green/ochre off their own targets rather than just adding umber under them. Moved into `turkish()` itself,
+  // immediately after its own first ground throw and before gold/spots, so both passes land in the one place that
+  // is genuinely "on top of the first umber throw, below everything else": `bg2Fill`/`bg2Cell` threaded straight
+  // through.
+  turkishBase(b, o.sizeMul ?? 4, o.bgFill !== undefined
+    ? { densityMul: o.densityMul ?? 0.45, exclude: round, shape: 2.5, ground: pal.spots[0], bgFill: o.bgFill, bgR: o.bgR, bgCell: o.bgCell, bg2Fill: o.bg2Fill, bg2Cell: o.bg2Cell, bg3Fill: o.bg3Fill, bg3Cell: o.bg3Cell, gallDots: o.gallDots }
+    : { densityMul: o.densityMul ?? 0.45, exclude: round, shape: 2.5, skipBackground: true, gallDots: o.gallDots });
+  // The "pale colour in the bands too" throw that used to live here is GONE (2026-09-14, user: "I'm not seeing
+  // spots in Zebra!") — not a style choice, a bug: a scene is hard-capped at 8 sprinkle layers (sprinkle()'s own
+  // `if (slot >= 8) return this`), and 6 band spots + this throw + gall water (re-enabled for paper veining, see
+  // the turkishBase call's own note) already used all 8, leaving zero room for ZEBRA_DROPS — the actual large
+  // "sits on the bands" drops, thrown separately in the "Zebra" recipe's own build(), AFTER this base's own comb —
+  // so it was silently dropped by that same cap the moment gall water came back, and every rendered sheet since
+  // has been missing its single most defining feature without any error to say so. This throw's own contribution
+  // (thin pale bands mixed among the others) is real but strictly less salient than the large drops it was
+  // crowding out, so it goes rather than the layer budget being fought over every time a future change needs a slot.
   // On sheets whose drops sit sparsely on bare paper (dp 25, 177: 45–50 % paper) every drop shows its own path: the
   // scans have long tapered streaks all leaning one way, bending only over 50 mm or more, never the alternate zigzag of a
   // comb drawn twice; one pass of a comb with teeth ~50 mm apart, pulled hard, draws them so.
   if ((pal.paperPct ?? 0) > 20 && o.spacing === undefined) b.comb(-90, 50, { ripple: 3, L: 3, kernel: "wake" });
-  else b.comb2(-90, o.spacing ?? 18, { ripple: 1.8 });   // sharp tines (comb2 default): the drops are cut along the tine paths (dp 15, 386); a zebra's bands measure 5–15 mm wide on dp 15 at true scale, and a harder pull takes them to 2–5
+  else {
+    // The missing piece (user, 2026-09-14: "take a look at Antique Straight, which has a similar recipe") — Antique
+    // Straight is `featherBase()` verbatim, and Feather's own quilling comes from a FINE comb (perpendicular,
+    // wake kernel) pre-organising the stone throw into lines BEFORE its wide comb2 cross-combs them into quills.
+    // Zebra's comb2 alone was the raw stone throw with nothing pre-organising it, which is exactly why every
+    // spacing/ripple/plateau search on the comb2 alone (previous attempts, still visible in git history) came out
+    // as a sharp zigzag rather than the scan's own soft, rounded rhythm — there was no line structure for it to
+    // gently quill, only blobs to cut. Scaled down from Feather's own hairline numbers (8 mm fine spacing, 2 mm
+    // core) to Zebra's much coarser bands: fine comb at 5 mm, comb2 restored to its original 18 mm/1.8 ripple.
+    // Spacing and angle both checked against the scan (user, 2026-09-14: "check the spacing and angle of the Zebra
+    // quills, relative to the sizes of the dots"). Spacing: autocorrelation of the band texture gives a dominant
+    // periodicity of 8-15 mm (median 10.4), and the large ochre drops themselves measure d50 9.7 mm — the two are
+    // close to 1:1, not the roughly 2:1 (comb2 at 18 mm) and 1:2 (fine comb at 5 mm) the previous, untested guess
+    // had them at; rescaled to comb2 10 mm / fine comb 3 mm, holding the same ~3.3x ratio between them. Angle: the
+    // fine comb was copied from Feather at a right angle to the main comb2, but this sheet's own already-measured
+    // `streak` field has fine (8.4°) and coarse (10.0°) nearly the SAME angle, not perpendicular like Feather's —
+    // meaning Zebra's fine texture, unlike Feather's genuine cross-hatch, isn't actually crossed at right angles to
+    // its own band flow. Confirmed by rendering both: the same-direction fine comb below holds the bands together
+    // as one continuous flow, closer to the scan; the perpendicular version (tried first) reads more choppy/
+    // fragmented, breaking each band into short interrupted segments the scan doesn't show.
+    // Reverted from the measurement above (user, 2026-09-14: "it's not looking right... the quills need to be at
+    // least twice as far apart", and "more quilling" — stronger, not just present): the autocorrelation this was
+    // based on was evidently reading a contaminated/mixed signal, not the true quill-to-quill spacing. Spacing
+    // doubled (10→22), ripple raised on both combs for a more pronounced convergence.
+    // Ripple pulled back down again (user, 2026-09-14: "the angle of the quills needs to be reduced") — per
+    // featherBase's own precedent, ripple sets the crossing angle at the quill's inflection, not just its
+    // strength (Feather's own increase, 1.5→2.0, was documented there as widening that angle); "quilling similar
+    // to but not as extreme as Feather" means Zebra's angle should sit BELOW Feather's 2.0, not above it as the
+    // last, over-corrected pass (2.2/2.6) left it.
+    // Spacing doubled again (user, 2026-09-14: "quill spacing needs to be doubled again") — 22→44.
+    // Ripple (and with it the crossing angle) reduced further (user, 2026-09-14: "reduce the ripples and the
+    // quill angle") — both combs pulled back again, below even the previous, already-reduced pass.
+    // First comb's ripple tried at 0 altogether (user, 2026-09-14: "try removing the first comb's ripple
+    // altogether") — at ripple 0 it becomes a no-op (z = ripple·s/(...) = 0, no displacement), leaving only
+    // comb2's own two passes to do the quilling.
+    // "Match the ripple to the scan" was tried at fine ripple 1.5 (see git history for the coherence-measurement
+    // work behind that value), but reverted (user, 2026-09-14: "No, remove the ripple again") — back to 0, a
+    // no-op (z = ripple·s/(...) = 0), leaving only comb2's own two passes to do the quilling.
+    b.comb(-90, 6, { ripple: 0, L: 1.5, kernel: "wake" });
+    b.comb2(-90, o.spacing ?? 44, { ripple: 1.2 });
+  }
   b.jog(90, 2);
   b.still = false;
   return pale;
+};
+/** The plain "Nonpareil" recipe's own base (2026-09-14, user: "go back to the very initial version of Nonpareil"),
+ *  restored to close to its very first form — a stone base, the get-gel (a wide comb drawn twice, halving), then a
+ *  fine comb drawn once, with none of `nonpareilBase`'s later bold/pull/width/colClump apparatus (kept, unchanged,
+ *  for Icarus/Cathedral/Double comb/Bouquet/French curl on Nonpareil below, each its own authored pattern tuned
+ *  against its own scan) — plus two things that base never had:
+ *   - size regulation (`shape`, replacing every spot's own measured `wk` for this throw): the catalogue's own
+ *     account of nonpareil describes colours "dropped sequentially onto the bath using some sort of implement to
+ *     regulate the drop sizes", a controlled technique distinct from Turkish's free brush spatter;
+ *   - rows (`rowPeriod`/`alignDeg`, see LayerSpec.rowPeriod): each colour dropped as a set of ROWS aligned along
+ *     the get-gel's own pull direction, not a scatter — the actual missing piece behind the long bands, since a
+ *     uniform post-throw stretch/drag of an isotropic scatter can never manufacture that alignment (it elongates a
+ *     drop and its neighbour-gap by the same factor, so the ratio between them — and whether adjacent drops'
+ *     dragged streaks actually meet — never changes no matter how hard the drag is pulled). */
+const nonpareilOriginal = (b: Builder, fine?: number) => {
+  const dir = b.pal.band?.dir ?? -90;
+  const IMPLEMENT_SHAPE = 4; // see turkishBase's own note: tighter than any free stone-throw's fitted wk (clamped ≤ 3)
+  const ROW_PERIOD = 2; // rows every 2nd lattice row; sprinkle() packs the kept rows √2 denser so overall coverage is unchanged
+  b.turkish({ cell: 14, sizeMul: 2.4, densityMul: 0.6, gallDots: false, shape: IMPLEMENT_SHAPE, rowPeriod: ROW_PERIOD, alignDeg: dir + 90 + b.axis });
+  b.comb2(dir + 90, 22, { ripple: 2.2 });
+  b.comb(dir, fine ?? b.pal.band?.pitch ?? 2.4, { ripple: 1.3 });
+  return b;
 };
 /** Nonpareil base: a stone base, the get-gel (a wide comb drawn twice, halving), then a fine comb drawn once
  *  across it. `fine` is the fine comb's spacing: ~4 mm on dp 82; the double combs sit on a coarser nonpareil
@@ -912,7 +1046,17 @@ const nonpareilBase = (b: Builder, fine?: number, o: { dir?: number; ripple?: nu
   // is about to cut the sheet into, not a separately guessed scale (user, 2026-09-12: dp 17's "coloured bands still
   // need to be longer and thicker" — this is what was silently defeating the whole mechanism).
   const colClump = o.colClump ? { dirDeg: dir + b.axis, period: 22 * Math.sqrt(coarse) } : undefined;
-  b.turkish({ cell: 16 * Math.sqrt(coarse), sizeMul: 3 * Math.sqrt(coarse) * bold, densityMul: 0.3 / (bold * bold), gallDots: false, shape: 2.5, colClump });
+  // `shape` (the stone-throw's Weibull size shape, overriding every spot colour's own individually-measured `wk`
+  // for this base throw) is higher than turkishBase's own default `sizeMul`-derived spread, on purpose (user,
+  // 2026-09-14): nonpareil's catalogue accounts describe the colours "dropped sequentially onto the bath using
+  // some sort of implement to regulate the drop sizes" — a controlled, one-at-a-time dropping technique, distinct
+  // from Turkish's free brush-thrown spatter (which the family's stone-throw call had been quietly reusing
+  // wholesale, `shape: 2.5`, no tighter than Turkish's own free throw ever gets). Raised to 4 — a size distribution
+  // Turkish's own free-throw fit never reaches (fitRecipeSizes clamps `wk` to 3.0) — so the get-gel comb it feeds
+  // gathers genuinely more even, implement-sized material into its bands, rather than the same broad spatter every
+  // stone pattern starts from.
+  const IMPLEMENT_SHAPE = 4;
+  b.turkish({ cell: 16 * Math.sqrt(coarse), sizeMul: 3 * Math.sqrt(coarse) * bold, densityMul: 0.3 / (bold * bold), gallDots: false, shape: IMPLEMENT_SHAPE, colClump });
   // The bath is dragged once before any comb touches it (user, 2026-09-11): the rake is drawn the length of the bath
   // and every drop is pulled into a streak along its travel, so what the get-gel then cuts is a field of bands, not a
   // field of blobs. DRAG is the elongation that one pass gives; `widthStretch` (see above) multiplies it further when
@@ -971,8 +1115,8 @@ export const RECIPES: Recipe[] = [
     build: (p, pal) => { const b = new Builder(p, pal); const g = pal.gold ?? pal.spots[0];
       b.sprinkleStats(g, b.statsOf(g, { perCm2: 0.6, d50: 6, wk: 0.9 }), { style: STYLE.METALLIC });
       b.turkish({ cell: 14, ringed: true, gold: false }); return b.drift().scene(); } },
-  { name: "Nonpareil", streaks: "h", streakScale: "coarse", /* the get-gel bands as authored run across; the bands are the robust measurement (dp 284: tongues incoherent, bands 0.8) */ group: "Combed", palette: "nonpareil19", palettes: ["nonpareil19", "dp21", "antique19"], terms: ["nonpareil", "get gel", "getgel", "old dutch"], defaults: { ...D19, ...COMBED_LOOK, viscosity: 0.3 }, note: "Get-gel (wide comb twice) then a 2–3 mm comb drawn once.",
-    build: (p, pal) => nonpareilBase(new Builder(p, pal), undefined, { colClump: pal.band !== undefined }).drift().scene() },
+  { name: "Nonpareil", streaks: "h", streakScale: "coarse", /* the get-gel bands as authored run across; the bands are the robust measurement (dp 284: tongues incoherent, bands 0.8) */ group: "Combed", palette: "g17", palettes: ["nonpareil19", "dp21", "antique19"], terms: ["nonpareil", "get gel", "getgel", "old dutch"], defaults: { ...D19, ...COMBED_LOOK, viscosity: 0.3 }, note: "Get-gel (wide comb twice) then a 2–3 mm comb drawn once.",
+    build: (p, pal) => nonpareilOriginal(new Builder(p, pal)).drift().scene() },
 
   { name: "Feather", streaks: "h", group: "Combed", palette: "g229", palettes: ["g229", "g237", "g238", "g29"], terms: ["feather", "chevron"], defaults: { ...D19, viscosity: 0.8, stretchLimit: 1e5, drift: 0 }, note: "A fine comb draws every colour into hair lines; a comb with widely set teeth drawn across them and back, halving, and pulled hard draws the lines into hyperbolae: barbs swooping into the periodic quills and running along them (dp 229).",
     build: (p, pal) => { const b = new Builder(p, pal); const round = roundColours(pal, 1.6); /* on a feather every colour is combed; the fragments' elongation of ~2 is the scan's, not a thrown-after drop's (dp 480: three colours were held back and the feather vanished) */ featherBase(b, round);
@@ -1163,13 +1307,234 @@ export const RECIPES: Recipe[] = [
       if (!round.length && !hasWhiteSpot(pal)) b.sprinkleStats(pal.white, b.statsOf(pal.white, { perCm2: 2.3, d50: 1.6, wk: 0.9 }), { anim: 0.6 });
       return b.drift().scene(); } },
 
-  { name: "Zebra", streaks: "v", group: "Sprinkled", palette: "dp61", palettes: ["dp61", "antique19"], terms: ["zebra"], defaults: { ...D19, stretchLimit: 1e5, drift: 0 }, note: "Turkish base; a comb with one set of teeth drawn through twice, down and back up with the second pass halving the first, pulls the colours into long flowing bands (gezogener Achat); then one or more colours sprinkled or splashed on as large drops that sit on the bands (Wolfe and Miura; dp 15, 386).",
+  { name: "Zebra", streaks: "v", group: "Sprinkled", palette: "g15", palettes: ["dp61", "antique19"], terms: ["zebra"], defaults: { ...D19, stretchLimit: 1e5, drift: 0 }, note: "Turkish base; a comb with one set of teeth drawn through twice, down and back up with the second pass halving the first, pulls the colours into long flowing bands (gezogener Achat); then one or more colours sprinkled or splashed on as large drops that sit on the bands (Wolfe and Miura; dp 15, 386).",
     build: (p, pal) => { const b = new Builder(p, pal); const round = roundColours(pal);
-      const pale = zebraBase(b, round);
+      // See zebraBase's own note (2026-09-14, user: "there isn't that much black in the original... Ochre is
+      // *not* the solid base — white is! In fact, there is no ochre in the Turkish base at all!") — no colour is
+      // forced into a solid-ground role any more; every spot, black included, lands straight on the paper.
+      // The order matters more than any individual colour's own perCm2/d50: a colour thrown later in this list
+      // can paint over one thrown earlier, so being early costs real coverage no density knob fully makes up
+      // (measured directly this session, on black, green, red and umber in turn). `red` was tried in this order
+      // (user: "the throw order is red → black → yellow → green → umber", later "I told you to put red below
+      // black!" after an earlier, separate instruction to drop it as a thrown colour entirely had been
+      // misapplied) but then rejected outright (user, 2026-09-14: "I don't want red!! I want umber in place of
+      // red.") — not a reordering, dropping red as a thrown colour again, this time deliberately, with `umber`
+      // moved into the front slot red had occupied. `spots` is now umber, black, yellow, green (umber thrown
+      // first, most exposed to everything after it; green last, least exposed). Umber and black — both near the
+      // front — needed their own boost beyond their catalogued perCm2/d50 to reach their own targets there
+      // (their catalogued d50 is a post-comb *fragment* size, not a throw size, same caveat as every colour
+      // here); green and yellow — now further back, less exposed than in the previous ordering — needed less
+      // than their catalogued perCm2 to avoid overrunning theirs.
+      // Umber's own perCm2/d50 have needed rescaling twice since (each time `densityMul` was raised again to
+      // fight white, user, 2026-09-14 both times: "umber is too fragmented") — a colour's OWN effective packing
+      // density is perCm2 × densityMul, so raising densityMul alone re-fragments a colour whose perCm2/d50 were
+      // already balanced for the previous, lower value, even with its own measured coverage unchanged (checked
+      // each time). perCm2 0.13→0.08, d50 100→190mm this pass — same total area (perCm2×d50² held constant), just
+      // fewer, bigger drops; if densityMul moves again, umber likely needs the same rescale again. Rescaled once
+      // more (user, 2026-09-15: "reduce paper, ideally by making umber less fragmented") to perCm2 0.03/d50 320mm
+      // — still fewer/bigger, same total area, confirmed unchanged to the decimal (25.8 %) even at this much
+      // larger d50. So the fragmentation genuinely is fixed again (checked by render), but this lever cannot
+      // itself move paper's own number: it only ever redistributes umber's own already-fixed area into fewer,
+      // larger pieces, it can't create new area. Paper stayed at 11.5 % — if it needs to drop further, the next
+      // lever has to be something else again (perCm2/d50 on the *other* colours, or `bgFill`, tried again here
+      // up to 0.945 with no further effect — it too has plateaued in this density regime).
+      // "More umber, less white" (user, 2026-09-14, asked twice) hit a real ceiling from perCm2/d50 alone: with
+      // umber first in the throw order, its own coverage stopped responding to its own settings at all — doubling
+      // its d50 a second time (110mm→220mm, same area) moved its measured coverage by nothing, confirmed to the
+      // decimal, because black/yellow/green (all drawn after it) simply claim whatever it doesn't. `bgFill`
+      // breaks that ceiling structurally rather than fighting it with more perCm2/d50 tuning: `turkish()`'s own
+      // `ground` mechanism (still on its option surface, just not used by zebraBase's default `skipBackground`
+      // path any more) throws the FIRST spot — umber — as a partial base film UNDER the others, not a normal
+      // competing spot; the other colours still land on it exactly as before. Swept 0.55→1.0 (user, "yes! keep
+      // going!"): coverage rises smoothly with fill until 1.0 itself, which is a cliff — paper drops to exactly 0
+      // and umber jumps to 40 %, the same over-dominant "ground film" shape this session already rejected once.
+      // Settled at 0.85, short of that cliff: umber 15.7→25.7 %, paper 24.3→12.4 % (measured, real recipe path —
+      // the CDP probe's own manual Builder reconstruction gave a completely different, wrong palette here and was
+      // discarded). `bgFill` itself later plateaued around 0.93-0.945 (no further paper change), so raising
+      // `densityMul` again (8.0→9.5, user: "increase umber and reduce paper by a bit") reduced paper genuinely —
+      // but, true to form, benefited green/yellow/black more than umber itself, so green/yellow's own perCm2 were
+      // cut further (still floor-adjacent, 0.007→0.003) and black's own d50 nudged back down (4.6→4.3mm, the same
+      // sharp threshold used every other time) to hand umber back what the density rise had taken from it.
+      // A genuine second structural fix (user, 2026-09-15: "if a human can do it, you can do it" — the earlier
+      // "plateaued" report wasn't good enough). Re-examined the `if (fill>=0.95 && o.bgR===undefined)` branch
+      // in `turkish()` itself: the "cliff" at fill 0.95 only fires when `bgR` is left unset — passing `bgR`
+      // explicitly (even at the SAME value the default, 0.5, would have used) keeps the partial-fill sprinkle
+      // path active however high `bgFill` goes, avoiding the all-or-nothing jump entirely. That alone let
+      // `bgFill` go all the way to ~1.0 smoothly. Separately, `bgCell` (the ground's own lattice spacing,
+      // hard-coded to `cell * 0.8` = 14.4mm until now) turned out to be a real, previously-untried lever: swept
+      // 8→4→2→1mm and found a genuine optimum around 2mm — smaller cells pack the ground's own circles far more
+      // completely (less of `bgR`'s own footprint lost to sprinkle()'s per-cell candidate/jitter system), with
+      // 1mm slightly worse again. `bgR` itself was swept too (0.35, 0.45, 0.5, 0.6) and the ORIGINAL default,
+      // 0.5, remained the best — both directions away from it were worse, not better. Net result: umber
+      // 25.3→26.1 %, paper 10.9→9.9 %, both moving the right way together for the first time this session,
+      // without pulling black/ochre off their own targets to do it.
+      // But `bgCell: 2` traded that for a real cost the numbers don't show (user, 2026-09-15: "I want umber to be
+      // less fragmented" — right after praising the fix above): that 2mm ground lattice is fine enough to leave
+      // its own visible circle-packing gaps, reading as a fine white stipple through the dark areas. Backed off
+      // to 8mm — checked by render, clean again, no stipple — giving up some of the gain (umber 26.1→25.7 %,
+      // paper 9.9→10.5 %) but keeping it well ahead of the pre-`bgCell` baseline (25.3 %/10.9 %) instead of
+      // reverting to the original 14.4mm outright.
+      // Some residual umber fragmentation was still visible even at `bgCell: 8` (user, 2026-09-15: "reduce the
+      // umber fragmentation a bit more") — not from the ground this time, but the same perCm2/d50 count-vs-size
+      // trade as before, taken one step further: 0.03/320mm → 0.008/620mm (perCm2×d50² held constant, so the
+      // same total area, confirmed unchanged: umber still measures ~25 %). Also nudged `densityMul` 9.5→10.5
+      // ("while trying to reduce paper") — a real but small win (paper 11.0→10.5 %), at the cost of black
+      // drifting a little over its own target (20.8→22.2 %) as the same density-favours-later-colours coupling
+      // documented everywhere else in this file.
+      // Paper's own target is 7.1 % (the scan's own measured value), and at 10.5 % it was still the furthest-off
+      // number in the whole table (user, 2026-09-15: "try to get it closer to 7.1, while reducing fragmentation.
+      // don't worry about later colours for now" — explicit permission to let black/yellow/green drift off their
+      // own targets to get there). Pushed every ground-film lever first, since none of them touch black/yellow/
+      // green directly: `densityMul` 10.5→22 (paper 10.5→9.5 %, but sharply diminishing — 16 alone already gave
+      // 9.6 %, so the last third of that jump bought almost nothing), `bgCell` 8→6mm (9.5→9.4 %, checked by
+      // render again at this tighter spacing — still clean, no repeat of the 2mm stipple), `bgFill` 0.99→0.999
+      // (no measurable change at all, fully saturated). That's the structural ceiling of the ground-film route on
+      // its own: paper stuck at ~9.4 % however hard those three are pushed. Getting the rest of the way needed
+      // the lever those three don't touch — black/yellow/green's own `perCm2`, raised hard (black 0.01→0.016,
+      // yellow/green 0.003→0.0062 each) so they eat directly into paper's own share, landing paper exactly on
+      // 7.1 % (measured, real recipe path). As authorized, this pulls black/yellow/green well past their own
+      // targets (black 20.0→14.5 %, yellow 6.9→14.5 %, green 10.3→20.9 %) and pulls umber/ochre down with them
+      // (umber 25.7→17.2 %, ochre 27.7→25.8 %) — a straightforward consequence of throw order, not a new
+      // mechanism. Umber's own fragmentation fix from last turn (0.008/620mm) needed no further change: checked
+      // by render at this much higher density and still solid, no stippling — it was already saturated enough
+      // (d50 620mm, sig 0.6) that the surrounding density changes don't disturb it.
+      // Next turn (user: "increase ochre and reduce green" — green having drifted to 20.9 %, roughly double its
+      // 10.3 % target, on the previous turn's "don't worry about later colours" licence): green's own `perCm2`
+      // pulled right back, 0.0062→0.0022, landing it at 10.6 %. Being thrown last among the four zebraBase spots,
+      // freeing green's own footprint mostly revealed yellow/black/umber underneath rather than paper — yellow in
+      // particular kept climbing (already well over its own target from the paper push two turns back, and this
+      // turn wasn't scoped to touch it). `densityMul` nudged 22→28 to hold paper near 7.1 % through the green cut
+      // (green's reduced footprint alone would have let more paper show). Ochre's own throw, separately below,
+      // bumped 0.38→0.4 to close its own gap — landed almost exactly on target (28.8 % vs 28.73 %).
+      // Next turn (user: "reduce yellow" — sitting at 20.5 %, three times its 6.87 % target). `perCm2`
+      // 0.0062→0.0019 in palettes.generated.ts landed it at 6.2 %. Thrown right under green (last of the four),
+      // freeing yellow's own footprint mostly revealed umber/black underneath — a genuine bonus, umber 17.9→23.3 %
+      // and black 14.8→20.1 %, both much closer to their own targets without being touched directly — but also let
+      // paper climb (7.3→9.7 %, tried `densityMul` 28→34 across several steps to claw it back; paper plateaued
+      // around 9.6-9.8 % regardless, the same saturating-ceiling shape as every other push on this lever this
+      // session, so settled at 30 rather than spend more of it re-inflating yellow/green, which `densityMul`
+      // favours disproportionately). Paper is off its 7.1 % target again as a result — not scoped to fix this turn.
+      // Next turn (user: "increase umber" — 23.3 %, well under its 27.32 % target). Umber's own `perCm2`/`d50`
+      // confirmed unresponsive again (0.008→0.015 moved nothing — the same ceiling documented at the top of this
+      // block: as the ground film, its own settings stopped mattering once enough competes above it). Tried every
+      // other lever in turn: `densityMul` down to 20 and 12 (non-monotonic — 20 helped umber a little at real cost
+      // to paper, 12 made it worse AND spiked black, crossing black's own sharp d50 threshold), `bgR` off 0.5 both
+      // directions (worse either way, as always), black's own `perCm2` down hard (0.016→0.006 flipped black UP to
+      // 23.9 % and umber DOWN — another non-monotonic reversal, not a usable lever). What actually worked: `bgCell`
+      // tightened 6→4mm (checked by render again, still clean at this depth) for a small direct gain, and backing
+      // ochre's own throw back off 0.4→0.38 (below) for a bigger one — ochre, thrown last and unobstructed, sets a
+      // flat ceiling on everything before it via its own share of the sheet, so trimming it back gives every
+      // pre-ochre colour a bit more room at once. Net: umber 23.3→23.9 %, and ochre landed almost exactly back on
+      // its own target as a side effect (28.7 % vs 28.73 %). A real but modest gain — every stronger lever tried
+      // is genuinely saturated or non-monotonic at this point, not just under-explored.
+      // Next turn (user: "make umber less fragmented, while reducing paper, and holding everything else constant"
+      // — the tightest brief of the session: two goals, but every other colour's own number pinned). Two false
+      // leads first, both worth recording so they aren't retried blindly: (1) umber is thrown TWICE — once as the
+      // ground film, again in `turkish()`'s own per-spot loop, since `round` (the `exclude` list, colours with
+      // el < 2.2) is empty for every g15 spot, all of them elongated. Excluding umber from that second throw looked
+      // like a plausible source of "fragmentation" (a second, independent layer of drops on top of the ground) —
+      // tested directly, and it isn't: excluding it cost umber 6 points AND sent paper up to 16.3 %, i.e. that
+      // second throw is doing real, load-bearing work, not duplicating anything. (2) A further area-preserving
+      // umber rescale (0.008/620→0.004/880, same perCm2×d50²) moved nothing visible at this zoom and cost a touch
+      // of paper back — d50 620mm was already well past the point where more only relabels the same shape, so left
+      // as-is. A third false lead, not caught until the user looked (2026-09-15: "you just increased the
+      // fragmentation!"): `bgCell` re-swept down to 2mm on the theory that umber's own d50, now 620mm rather than
+      // the ~320mm it was the last time this lever went this low, would no longer show the fine white stipple that
+      // made 2mm a bad trade back then. Checked by close-crop render comparison first, saw no difference, reported
+      // it fixed — wrongly. The crop happened to land on a patch that didn't show it; a wider look at the full
+      // sheet (top-left corner, right edge — thin, elongated stretches of the ground colour rather than a single
+      // solid block) shows the same fine white stipple through the umber that 2mm always caused, unrelated to
+      // umber's own d50 after all. Reverted to 8mm. Lesson for next time: a single small crop is not enough to
+      // clear a lever this session has already burned twice on the same failure mode — check multiple regions,
+      // including thin/elongated stretches of the colour in question, not just one solid block.
+      // Re-checked properly next turn (user: "keep the same constraint, but this time check a larger patch") —
+      // rather than trust another crop, used `measureFragments()` (src/main.ts, already built for the scan-fitting
+      // pipeline: flood-fills the rendered id buffer into connected components per colour) to put a number on it.
+      // Baseline at 8mm: umber ~580-595 fragments, d50 ~2.6mm. At 4mm: 766 fragments (+29%), d50 2.07mm (-21%) — a
+      // real, repeatable increase, not noise (two baseline runs at 8mm agreed to within 3%). At 6mm: 658 fragments,
+      // and — tellingly — paper unchanged at 9.9 %, so 6mm is strictly worse than 8mm on both counts at once, no
+      // trade at all. At 12mm: fragments drop to 450 but paper rises to 10.2 %. So bgCell genuinely trades
+      // fragmentation against paper in both directions around 8mm; it cannot move both the way this turn's brief
+      // wants. Also re-checked umber's own perCm2/d50 with the same tool (0.008/620→0.004/880): fragment count rose
+      // slightly (582→647) rather than fell, confirming the earlier visual "no benefit" finding with a number
+      // this time, not just an impression. Net: no lever in this option surface delivers both halves of "reduce
+      // paper, reduce fragmentation, hold everything else constant" at once — bgCell:8 is the genuine Pareto point
+      // among every value tried either side of it, confirmed by fragment count this time, not just a crop.
+      // A genuinely different lever, next turn (user: "how about two throws of umber?") — not a finer lattice
+      // (which only ever closes gaps by shrinking every drop, the whole reason bgCell trades against fragmentation)
+      // but a second, INDEPENDENT sprinkle of the same ground colour at the SAME drop size, landing at different
+      // jittered positions and so catching some of the first pass's own gaps without making any individual drop
+      // smaller. First implementation was wrong: added as its own `b.sprinkle()` call in `zebraBase`, AFTER
+      // `turkishBase` returns — but `turkishBase`/`turkish()` already throws black/yellow/green internally, so a
+      // call placed after it returns landed on TOP of all of them, not below. At high fill (0.5) this blew every
+      // other colour off its own target (paper 6.7 %, umber 39.2 %, black down to 14 %) because the "second throw"
+      // was really eating directly into colours already painted, not adding base material under them (caught by
+      // the user: "make sure the second umber throw is... below any other colour"). Fixed by moving the second
+      // pass into `turkish()` itself, immediately after its own first ground throw and before gold/spots — see the
+      // note there. With the ordering corrected, `bg2Fill` swept small (0.05, 0.08): 0.08 gave the better result —
+      // paper 9.9→9.1 %, umber 23.9→23.8 (roughly held, since it's now genuinely occluded like everything else)
+      // — with fragment count if anything slightly IMPROVED (n≈552 vs the ~580-595 baseline, d50 2.67mm vs 2.6mm),
+      // unlike every `bgCell` value below 8mm. Inserting a new layer before black/yellow/green shifts every
+      // subsequent layer's own hash seed (confirmed deterministic — re-running gave identical numbers both times —
+      // so this is a real reseeding effect, not noise), which reshuffled yellow and green's own drop placement
+      // enough to need re-tuning: yellow perCm2 0.0019→0.0011 and d50 2.84→2.4, green perCm2 0.0022→0.0023, ochre's
+      // own throw 0.38→0.382 (below). Black stayed put — another pass at its own perCm2 moved it the wrong way
+      // again, the same sharp-threshold non-monotonicity documented earlier in this file. Net, all via the real
+      // recipe path: paper 9.9→9.6 %, umber 23.9→25.2 % (closer to its own 27.32 % target as a genuine side
+      // effect), ochre/green/yellow/black all within about a point of where this turn found them, fragment count
+      // not worse. Checked by render at two large patches (not one small crop, after last turn's mistake) — clean.
+      // A third pass, next turn (user: "maybe add a third throw?") — same mechanism again (see `turkish()`'s own
+      // note), added there rather than repeating the first attempt's ordering mistake. Swept `bg3Fill` 0.03→0.05→
+      // 0.15→0.3→0.35: yellow/ochre/black's own drift turned out to plateau almost immediately once a third pass
+      // exists at all (roughly the same ~26 %/4.7 %/22.7 % from 0.03 all the way to 0.3), while paper and umber kept
+      // responding right through that range — so, unlike the second pass, the "cost" of a third pass is close to a
+      // one-off, paid once a third pass exists, not scaling further with its own fill. That made it worth pushing:
+      // at 0.35 alone, paper hit 7.1 % — its own target, exactly — before any compensation. Settled at 0.3 (leaving
+      // a little headroom) and compensated the one-off drift once: yellow perCm2 0.0011→0.0023, ochre's own throw
+      // 0.382→0.43 (below); black left alone again (another perCm2 pass moved it backwards, same non-monotonicity).
+      // Net, real recipe path: paper 9.6→6.8 % (close to its own 7.1 % target), umber 25.2→26.8 % (close to its own
+      // 27.32 %), ochre 28.8→28.2, green 10.4→10.9, yellow 5.8→6.3, black 21.2→21.0 — every colour within about a
+      // point of its own catalogued target at once, the tightest fit this whole session. Fragment count kept
+      // falling too: n 552→447 (a real drop, not noise), and the area-weighted median piece size roughly doubled
+      // (dA50 ~16mm→17.7mm, `giant` — the single biggest connected piece's own share of the colour's area — 0.04→
+      // 0.12), i.e. umber is measurably LESS fragmented at the same time paper and every target improved. Checked
+      // by render at two large patches again: bigger, more continuous red streaks, no stipple. This uses the last
+      // of `turkish()`'s own 8-layer budget (ground + bg2 + bg3 + the 4-colour spot loop + ochre's own throw = 8
+      // exactly) — no room left for a fourth pass or any other sprinkle layer on this recipe without dropping one.
+      const pale = zebraBase(b, round, { densityMul: 30, gallDots: false, bgFill: 0.999, bgR: 0.5, bgCell: 8, bg2Fill: 0.08, bg2Cell: 8, bg3Fill: 0.3, bg3Cell: 8 });
       // The large final drops. On dp 15 and 386 they are the sheet's most abundant pale colour, which the mixture
       // model labelled the ground: it is thrown again last as large even drops that sit on the bands.
       for (const c of round) b.sprinkleStats(c, b.statsOf(c), { anim: 0.7 });
-      if (pale !== undefined) b.sprinkleStats(pale, ZEBRA_DROPS, { anim: 0.7 });   // see ZEBRA_DROPS: 0.14 per cm², median 8 mm, the largest ~20 mm (dp 15, 386)
+      // 2026-09-15 (user): "increase ochre to match the target" — ochre's own catalogued frac (28.73 %) is the
+      // sheet's single largest colour, but this throw (shared `ZEBRA_DROPS`, tuned for Dahlia too) was only
+      // landing it at ~10.6 %; boosted specifically for Zebra rather than touching the shared constant.
+      // First attempt raised d50 (6→9) to reach coverage, which packed same-sized circles almost wall-to-wall —
+      // wrong lever. `sprinkleStats` itself scales d50 ×1.35 before drawing (fragmentation-vs-thrown-size
+      // adjustment, its own comment), so the ORIGINAL d50: 6 was already correctly calibrated to this throw's own
+      // documented measurement ("median 8 mm, the largest ~20 mm", dp 15/386: 6×1.35 = 8.1). Refit properly (user,
+      // 2026-09-15: "refit the Weibull sampling... with caps if necessary") — d50/wk left at their measured
+      // values (6, 1.6: this shape already puts ~95th percentile around 18 mm against the scan's own observed
+      // ~20 mm max, so no separate cap was needed), only perCm2 raised (0.14→0.42, count, not size) to reach
+      // coverage. The render now shows genuine small-to-large size variation again, not uniform tiling. Nudged
+      // 0.42→0.38 (user: "fix that" — umber, thrown before ochre, was ~5 points under its own target) to give
+      // umber back a little of what ochre — thrown last, unobstructed — had been eating. Raised again, 0.38→0.44
+      // (user: "try again to reduce paper" — the umber size/count rescale two turns back couldn't touch paper,
+      // confirmed structurally; ochre, thrown last and unobstructed, is the one lever that reliably does). Swept
+      // 0.44 (ochre 30.8 %, paper 10.9 %) against 0.48 (ochre 32.6 %, paper 10.5 %) and 0.55 (ochre 37.1 %, paper
+      // 9.7 %) — diminishing paper returns for real overshoot on ochre's own target. Pulled back to 0.38 (user,
+      // 2026-09-15: "pull ochre back") — the trade wasn't worth it; ochre's own target (28.73 %) matters more
+      // than shaving another point or two off paper by pushing it further over.
+      // Raised again, 0.38→0.4 (user, 2026-09-15: "increase ochre" — measuring 25.8-29 % across this session's
+      // other changes, short of the 28.73 % target most of the time). Landed at 28.8 %, close enough.
+      // Pulled back to 0.38 again next turn (user: "increase umber") — with black/yellow/green now all sitting
+      // close to their own targets, ochre (thrown last, unobstructed) turned out to be the one lever left that
+      // still gives every earlier colour, umber included, a bit more room, purely by taking a bit less for itself.
+      // Landed back on its own target anyway (28.7 % vs 28.73 %) as a side effect, so no trade was actually made.
+      // Nudged 0.38→0.382 next turn to compensate the small drift the second umber ground throw (above) caused —
+      // ochre had drifted to 27.8 % once that landed; a small bump put it back to 28.8 %, close to its own target.
+      // Nudged again, 0.382→0.43, to compensate the THIRD umber ground throw's own one-off drift (26.7 % once that
+      // landed) — the same lever, doing the same job each time a new ground pass shifts everything downstream.
+      if (pale !== undefined) b.sprinkleStats(pale, { perCm2: 0.43, d50: 6, sig: 0.3, wk: 1.6 }, { anim: 0.7 });
       return b.drift().scene(); } },
 
   { name: "Gloster (Partridge eye)", streaks: "v", group: "Dispersant", palette: "gloster19", palettes: ["gloster19", "dp71", "dp91", "dp330", "dp87"], terms: ["gloster", "gloucester", "partridge"], defaults: { ...D19, stretchLimit: 1e5, drift: 0 }, note: "A Zebra: Turkish base, a comb with widely set teeth drawn down and back up, halving, into long flowing bands; then one colour mixed with turpentine thrown as large drops that sit on the bands, the dispersant opening very fine paper spots inside them (Miura; dp 65, 71, 91).",
@@ -1333,3 +1698,10 @@ export const RECIPES: Recipe[] = [
   { name: "Gold vein overprinted on Turkish", group: "Layered", palette: "dp138", palettes: ["dp138", "nonpareil19"], terms: ["gold vein overprinted on turkish"], defaults: { ...D19 }, note: "Turkish sheet with a lithographed gold vein network.",
     build: (p, pal) => { const b = new Builder(p, pal); b.turkish({ cell: 14, ringed: true }); return b.drift().scene({ goldNet: 1 }); } },
 ];
+
+// Temporary (2026-09-14): focus the running app on the four foundational patterns while their fits are being
+// redone from scratch, one sheet each, starting with the oldest available — not a permanent restriction. Every
+// other recipe/build function above is untouched and still fully working; only what's offered/cyclable in the UI
+// is filtered. Remove this filter (or extend VISIBLE_PATTERN_NAMES) to bring the rest back.
+const VISIBLE_PATTERN_NAMES = ["Turkish (Stone)", "Zebra", "Feather", "Nonpareil"];
+export const VISIBLE_RECIPES = RECIPES.filter((r) => VISIBLE_PATTERN_NAMES.includes(r.name));

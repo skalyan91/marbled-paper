@@ -1,5 +1,5 @@
 import GUI from "lil-gui";
-import { RECIPES, PALETTES, type Palette } from "./recipes";
+import { RECIPES, VISIBLE_RECIPES, PALETTES, type Palette } from "./recipes";
 
 export interface Settings {
   pattern: string;
@@ -155,7 +155,7 @@ export function bestRecipeFor(lead: string): string | null {
 
 export function makeGui(s: Settings, onChange: () => void, onRebuild: () => void) {
   const gui = new GUI({ title: "Marbled paper" });
-  const names = RECIPES.map((r) => r.name);
+  const names = VISIBLE_RECIPES.map((r) => r.name);
   const patternCtrl = gui.add(s, "pattern", names).name("Pattern");
   customDropdown(patternCtrl as unknown as Parameters<typeof customDropdown>[0]);
   // The palette dropdown lives in its own folder: lil-gui 0.20 replaces the options of a

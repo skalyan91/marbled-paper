@@ -58,6 +58,16 @@ export interface LayerSpec {
   // mean (an earlier version of this field did) put every column's total ink back where it started and mostly
   // cancelled the redistribution's own visual effect.
   colBias?: { dirDeg: number; period: number; phase: number; lo: number; hi: number };
+  // 2026-09-14 (user): the desired colours are "dropped sequentially onto the bath using some sort of implement to
+  // regulate the drop sizes" — not a scattered brush spatter, but a set of ROWS of dots (one row a stroke of the
+  // implement), which is what actually gives a subsequent comb long, continuous bands to gather, rather than the
+  // fundamentally scale-invariant problem a uniform stretch of an isotropic scatter can never fix: stretching a
+  // random lattice elongates both a drop and its own gap to its neighbour by the same factor, so no amount of drag
+  // closes a gap that was there proportionally before it. `rowPeriod` (cells; only rows 0, rowPeriod, 2·rowPeriod, …
+  // of this layer's own local grid get any drops at all, the rest forced empty) makes the rows explicit at the
+  // placement stage itself, in this layer's own local (rotated) grid — align `rot` with the row direction the get-
+  // gel is about to pull along, so a row is already a proto-band before any comb touches it.
+  rowPeriod?: number;
 }
 
 interface LayerStatic {
@@ -189,7 +199,7 @@ export function buildStatic(spec: LayerSpec): LayerStatic {
       const i = y * TILE + x;
       s.jx[i] = (rnd() * 2 - 1) * spec.jitter;
       s.jy[i] = (rnd() * 2 - 1) * spec.jitter;
-      const present = rnd() < spec.fill;
+      const present = rnd() < spec.fill && (spec.rowPeriod === undefined || y % spec.rowPeriod === 0);
       let rr: number;
       if (spec.shape !== undefined) {
         // shifted Weibull: r = floor + scale·(−ln U)^(1/k), scale set so the median equals spec.radius
